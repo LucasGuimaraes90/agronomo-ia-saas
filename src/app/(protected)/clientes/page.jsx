@@ -137,6 +137,10 @@ function ClienteModal({ cliente, onClose, onSave }) {
             {f('email','E-mail','email','joao@email.com')}
           </div>
           <div className="grid grid-cols-2 gap-3">
+            {f('cpf_cnpj','CPF / CNPJ','text','000.000.000-00')}
+            {f('cultura_principal','Cultura principal','text','Cafe, Milho...')}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             {f('municipio','Municipio','text','Passos')}
             <div>
               <label className="label">Estado</label>
@@ -145,7 +149,11 @@ function ClienteModal({ cliente, onClose, onSave }) {
               </select>
             </div>
           </div>
-          {f('cultura_principal','Cultura principal','text','Cafe, Milho, Soja...')}
+          <div>
+            <label className="label">Observacoes do produtor</label>
+            <textarea className="input h-20 resize-none" placeholder="Preferencias, historico, particularidades do produtor..."
+              value={form.observacoes||''} onChange={e=>setForm(p=>({...p,observacoes:e.target.value}))} />
+          </div>
 
           {/* PROPRIEDADE */}
           <div className="pt-3 border-t border-gray-100">
@@ -156,6 +164,15 @@ function ClienteModal({ cliente, onClose, onSave }) {
           <div className="grid grid-cols-2 gap-3">
             {f('hectares','Area (ha)','number','150','prop')}
             {f('cultura','Cultura','text','Cafe','prop')}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {f('municipio','Municipio','text','Passos','prop')}
+            <div>
+              <label className="label">Estado</label>
+              <select className="input" value={prop.estado||'MG'} onChange={e=>setProp(p=>({...p,estado:e.target.value}))}>
+                {ESTADOS.map(uf=><option key={uf}>{uf}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="label">Localizacao no Maps</label>
@@ -171,7 +188,16 @@ function ClienteModal({ cliente, onClose, onSave }) {
             </div>
             <p className="text-xs text-gray-400 mt-1">Abra o Google Maps, marque o local, clique em Compartilhar e cole o link aqui</p>
           </div>
-          {f('talhoes','Talhoes / Areas','text','Talhao A: 50ha cafe...','prop')}
+          <div>
+            <label className="label">Talhoes / Areas</label>
+            <textarea className="input h-16 resize-none" placeholder="Talhao A: 50ha cafe, Talhao B: 30ha pastagem..."
+              value={prop.talhoes||''} onChange={e=>setProp(p=>({...p,talhoes:e.target.value}))} />
+          </div>
+          <div>
+            <label className="label">Observacoes da propriedade</label>
+            <textarea className="input h-20 resize-none" placeholder="Solo, historico de culturas, problemas frequentes, anotacoes tecnicas..."
+              value={prop.observacoes||''} onChange={e=>setProp(p=>({...p,observacoes:e.target.value}))} />
+          </div>
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
@@ -217,8 +243,6 @@ export default function ClientesPage() {
     c._prop?.nome?.toLowerCase().includes(busca.toLowerCase())
   );
 
-  function navegar(url) { window.open(url, '_blank'); }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
@@ -248,7 +272,6 @@ export default function ClientesPage() {
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtrados.map(c => (
             <div key={c.id} className="card p-4 hover:shadow-md transition-shadow">
-              {/* Header: foto + nome + acoes */}
               <div className="flex items-start gap-3 mb-3">
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-primary-100 flex-shrink-0 flex items-center justify-center">
                   {c.foto_url
@@ -269,13 +292,15 @@ export default function ClientesPage() {
                 </div>
               </div>
 
-              {/* Contatos */}
               <div className="space-y-1 mb-3">
                 {c.telefone && <p className="text-xs text-gray-500 flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.telefone}</p>}
                 {c.municipio && <p className="text-xs text-gray-500 flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.municipio} - {c.estado}</p>}
               </div>
 
-              {/* Propriedade */}
+              {c.observacoes && (
+                <p className="text-xs text-gray-400 italic mb-3 line-clamp-2 border-l-2 border-gray-100 pl-2">{c.observacoes}</p>
+              )}
+
               {c._prop && (
                 <div className="border-t border-gray-100 pt-3">
                   <div className="flex items-center gap-2">
@@ -285,9 +310,10 @@ export default function ClientesPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-700 truncate">{c._prop.nome}</p>
                       {c._prop.hectares && <p className="text-xs text-gray-400">{c._prop.hectares} ha · {c._prop.cultura || ''}</p>}
+                      {c._prop.observacoes && <p className="text-xs text-gray-400 italic line-clamp-1 mt-0.5">{c._prop.observacoes}</p>}
                     </div>
                     {c._prop.localizacao_maps && (
-                      <button onClick={() => navegar(c._prop.localizacao_maps)}
+                      <button onClick={() => window.open(c._prop.localizacao_maps, '_blank')}
                         className="flex items-center gap-1 bg-primary-600 text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex-shrink-0">
                         <Navigation className="w-3 h-3" /> Navegar
                       </button>
