@@ -168,6 +168,7 @@ async function gerarPptx(markdown) {
   // Slide de capa
   const capa = prs.addSlide();
   capa.background = { color: '15803d' };
+  // Título dinâmico — quebra em 2 linhas se longo
   const tituloFontSize = titulo.length > 50 ? 28 : titulo.length > 35 ? 32 : 38;
   capa.addText(titulo, {
     x: 0.5, y: 1.5, w: 9, h: 2.5,
@@ -183,6 +184,7 @@ async function gerarPptx(markdown) {
 
   function adicionarSlideConteudo(titulo, itens) {
     const MAX_POR_SLIDE = 9;
+    // Divide em múltiplos slides se houver muito conteúdo
     for (let i = 0; i < itens.length; i += MAX_POR_SLIDE) {
       const parte = itens.slice(i, i + MAX_POR_SLIDE);
       const isParte = itens.length > MAX_POR_SLIDE;
@@ -193,6 +195,7 @@ async function gerarPptx(markdown) {
       const slide = prs.addSlide();
       slide.background = { color: 'FFFFFF' };
 
+      // Barra de título verde
       slide.addText(tituloSlide, {
         x: 0, y: 0, w: '100%', h: 1.1,
         fontSize: 20, bold: true, color: 'FFFFFF', align: 'left',
@@ -209,6 +212,7 @@ async function gerarPptx(markdown) {
         });
       }
 
+      // Rodapé
       slide.addText('Agrônomo IA', {
         x: 0, y: 6.8, w: '100%', h: 0.35,
         fontSize: 9, color: '9ca3af', align: 'right',
@@ -217,14 +221,15 @@ async function gerarPptx(markdown) {
   }
 
   for (const secao of secoes) {
+    // Filtra linhas inválidas: tabelas markdown, separadores, blocos de código, linhas vazias
     const itensBrutos = secao.linhas
       .filter(l => {
         const t = l.trim();
         if (!t) return false;
-        if (t.startsWith('|')) return false;
-        if (t.startsWith('---')) return false;
-        if (t.startsWith('```')) return false;
-        if (t.startsWith('├') || t.startsWith('└') || t.startsWith('─')) return false;
+        if (t.startsWith('|')) return false;      // tabela markdown
+        if (t.startsWith('---')) return false;     // separador
+        if (t.startsWith('```')) return false;     // bloco de código
+        if (t.startsWith('├') || t.startsWith('└') || t.startsWith('─')) return false; // tree
         return true;
       })
       .map(l => {
@@ -232,7 +237,7 @@ async function gerarPptx(markdown) {
         const isSubtitulo = l.startsWith('### ') || l.startsWith('#### ');
         const textoLimpo = l
           .replace(/^[-*] /, '')
-          .replace(/^#{", '')
+          .replace(/^#{2,} /, '')
           .replace(/\*\*(.*?)\*\*/g, '$1')
           .replace(/`([^`]+)`/g, '$1')
           .trim();
@@ -264,10 +269,11 @@ async function gerarXlsx(markdown) {
     pageSetup: { orientation: 'portrait', fitToPage: true },
   });
 
+  // Cabeçalho
   sheet.mergeCells('A1:C1');
   const tituloXlsx = extrairTitulo(markdown).toUpperCase();
   const tituloCell = sheet.getCell('A1');
-  tituloCell.value = tituloXlsx + ' —' + ' Agrônomo IA';
+  tituloCell.value = tituloXlsx + ' — Agrônomo IA';
   tituloCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
   tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15803D' } };
   tituloCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -280,12 +286,15 @@ async function gerarXlsx(markdown) {
   dataCell.alignment = { horizontal: 'center' };
   sheet.getRow(2).height = 20;
 
+  // Cabeçalhos de coluna
   const headerRow = sheet.addRow(['Seção', 'Item', 'Conteúdo']);
   headerRow.eachCell(cell => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.border = { bottom: { style: 'medium', color: { argb: 'FF15803D' } } };
+    cell.border = {
+      bottom: { style: 'medium', color: { argb: 'FF15803D' } },
+    };
   });
   sheet.getRow(3).height = 22;
 
@@ -298,41 +307,86 @@ async function gerarXlsx(markdown) {
   const secoes = parseSecoes(markdown);
   let rowNum = 4;
 
+  // Função para limpar linha de markdown
+  function limparLinhaXlsx(linha) {
+    return linha
+      .replace(/^#{1,6} /, '')
+      .replace(/^[-*] /, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .trim();
+  }
+
+  // Função para detectar se linha é tabela markdown e converter para texto
+  function tabelaParaTexto(linhas) {
+    const resultado = [];
+    let emTabela = false;
+    let cabecalho = null;
+
+    for (const linha of linhas) {
+      const t = linha.trim();
+      if (!t) continue;
+      if (t.startsWith('---') || t.startsWith('```')) continue;
+      if (t.startsWith('├') || t.startsWith('└') || t.startsWith('─')) continue;
+
+      if (t.startsWith('|')) {
+        // Linha de tabela markdown
+        if (t.match(/^\|[-| :]+\|$/)) continue; // linha separadora (|---|---|)
+        const colunas = t.split('|').filter(c => c.trim()).map(c => c.trim());
+        if (!emTabela) {
+          cabecalho = colunas;
+          emTabela = true;
+        } else {
+          // Linha de dados: "Coluna1: valor1 | Coluna2: valor2"
+          const pares = colunas.map((v, i) => cabecalho && cabecalho[i] ? `${cabecalho[i]}: ${v}` : v);
+          resultado.push({ tipo: 'bullet', texto: pares.join('  |  ') });
+        }
+      } else {
+        emTabela = false;
+        cabecalho = null;
+        const isSubtitulo = linha.startsWith('### ') || linha.startsWith('#### ');
+        const isBullet = linha.startsWith('- ') || linha.startsWith('* ');
+        resultado.push({ tipo: isSubtitulo ? 'subtitulo' : isBullet ? 'bullet' : 'texto', texto: limparLinhaXlsx(linha) });
+      }
+    }
+    return resultado;
+  }
+
   for (const secao of secoes) {
-    const itensDaSecao = secao.linhas.filter(l => l.trim());
+    const itensDaSecao = tabelaParaTexto(secao.linhas);
     if (itensDaSecao.length === 0) continue;
 
     let primeiraLinhaDaSecao = rowNum;
 
     for (let i = 0; i < itensDaSecao.length; i++) {
-      const linha = itensDaSecao[i];
-      const isSubtitulo = linha.startsWith('### ');
-      const isBullet = linha.startsWith('- ') || linha.startsWith('* ');
-      const textoLimpo = linha
-        .replace(/^### /, '')
-        .replace(/^[-*] /, '')
-        .replace(/\*\*(.*?)\*\*/g, '$1')
-        .trim();
+      const { tipo, texto } = itensDaSecao[i];
+      if (!texto) continue;
+      const isSubtitulo = tipo === 'subtitulo';
+      const isBullet = tipo === 'bullet';
+
       const row = sheet.addRow([
         i === 0 ? secao.titulo : '',
-        isSubtitulo ? textoLimpo : (isBullet ? '• ' + textoLimpo : ''),
-        isSubtitulo ? '' : textoLimpo,
+        isSubtitulo ? texto : (isBullet ? '• ' + texto : ''),
+        isSubtitulo ? '' : texto,
       ]);
+
       if (isSubtitulo) {
         row.getCell('item').font = { bold: true, color: { argb: 'FF166534' } };
         row.getCell('item').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
       }
+
       row.getCell('conteudo').alignment = { wrapText: true, vertical: 'top' };
       row.height = 18;
       rowNum++;
     }
 
+    // Mescla a coluna "Seção" para todas as linhas da seção
     if (rowNum - primeiraLinhaDaSecao > 1) {
       sheet.mergeCells(`A${primeiraLinhaDaSecao}:A${rowNum - 1}`);
     }
     const secaoCell = sheet.getCell(`A${primeiraLinhaDaSecao}`);
     secaoCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    secaoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15 803D' } };
+    secaoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15803D' } };
     secaoCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   }
 
@@ -342,35 +396,6 @@ async function gerarXlsx(markdown) {
 export async function POST(req) {
   try {
     const { messages, formato } = await req.json();
-    if (!messages || !formato) return NextResponse.json({ error: 'Parâmetros ausentes' }, { status: 400 });
-    const promptSistema = formato === 'pptx' ? PROMPT_PPTX : PROMPT_DOCUMENTO;
-    const markdown = await gerarConteudo(messages, promptSistema);
-    let buffer, contentType, filename;
-    if (formato === 'docx') {
-      buffer = await gerarDocx(markdown);
-      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      filename = `laudo_agronomo_${Date.now()}.docx`;
-    } else if (formato === 'pptx') {
-      buffer = await gerarPptx(markdown);
-      contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      filename = `apresentacao_agronomo_${Date.now()}.pptx`;
-    } else if (formato === 'xlsx') {
-      buffer = await gerarXlsx(markdown);
-      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      filename = `dados_agronomo_${Date.now()}.xlsx`;
-    } else {
-      return NextResponse.json({ error: 'Formato inválido. Use: docx, pptx, xlsx' }, { status: 400 });
-    }
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': String(buffer.length || buffer.byteLength),
-      },
-    });
-  } catch (err) {
-    console.error('Export error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
+
+    if (!messages || !formato) {
+      return NextResponse.json({ error: 'Parâmetros ausentes' }, { stat
