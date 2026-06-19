@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
+import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2, Paperclip, X, Sheet, Presentation } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
 const GREETING = `Ola! Sou o Agronomo IA.
@@ -27,7 +27,7 @@ function Mensagem({ msg }) {
       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isBot ? 'bg-primary-100' : 'bg-gray-200'}`}>
         {isBot ? <Bot className="w-4 h-4 text-primary-600" /> : <User className="w-4 h-4 text-gray-600" />}
       </div>
-      <div className={`max-w-[80%] space-y-2`}>
+      <div className="max-w-[80%] space-y-2">
         {imageBlock && (
           <div className={`rounded-2xl overflow-hidden border border-gray-200 ${isBot ? '' : 'ml-auto'}`}>
             <img src={`data:${imageBlock.media_type};base64,${imageBlock.data}`} alt="Imagem enviada" className="max-w-xs max-h-48 object-contain bg-gray-50" />
@@ -59,7 +59,7 @@ export default function ChatPage() {
   const [conversas, setConversas] = useState([]);
   const [conversaId, setConversaId] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [pendingImage, setPendingImage] = useState(null); // { data, media_type, name }
+  const [pendingImage, setPendingImage] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
@@ -127,7 +127,6 @@ export default function ChatPage() {
   async function sendMessage(e) {
     e?.preventDefault();
     if ((!input.trim() && !pendingImage) || loading) return;
-
     let userContent;
     if (pendingImage) {
       userContent = [
@@ -137,22 +136,19 @@ export default function ChatPage() {
     } else {
       userContent = input.trim();
     }
-
     const userMsg = { role: 'user', content: userContent };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
     setPendingImage(null);
     setLoading(true);
-
     try {
       const allMsgs = newMessages.filter(m => {
         const txt = Array.isArray(m.content) ? m.content.find(b => b.type === 'text')?.text : m.content;
         return txt !== GREETING;
       });
       const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: allMsgs }),
       });
       const data = await res.json();
@@ -171,34 +167,28 @@ export default function ChatPage() {
     }
   }
 
-  async function generateDoc(tipo) {
-    if (messages.filter(m => m.role === 'assistant').length < 2) return alert('Converse primeiro para gerar um documento.');
+  async function exportar(tipo) {
+    const assistantMsgs = messages.filter(m => m.role === 'assistant');
+    if (assistantMsgs.length < 2) return alert('Converse primeiro para gerar o arquivo.');
     setGenerating(tipo);
     try {
-      const res = await fetch('/api/document', {
+      const textMsgs = messages.filter(m => typeof m.content === 'string' && m.content !== GREETING);
+      const res = await fetch(`/api/export/${tipo}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ messages: textMsgs }),
       });
-      const { content } = await res.json();
-      const nome = `agronomo_ia_${Date.now()}`;
-      if (tipo === 'txt') download(new Blob([content], { type: 'text/plain' }), `${nome}.txt`);
-      else if (tipo === 'html') {
-        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo Tecnico</title>
-        <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6}
-        h1,h2,h3{color:#15803d}table{border-collapse:collapse;width:100%}
-        td,th{border:1px solid #ddd;padding:8px}th{background:#f0fdf4}</style></head>
-        <body>${content.replace(/## (.*)/g,'<h2>$1</h2>').replace(/### (.*)/g,'<h3>$1</h3>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</body></html>`;
-        download(new Blob([html], { type: 'text/html' }), `${nome}.html`);
-      }
-    } catch { alert('Erro ao gerar documento.'); }
-    finally { setGenerating(''); }
-  }
-
-  function download(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      const blob = await res.blob();
+      const exts = { excel: 'xlsx', pptx: 'pptx', docx: 'docx' };
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `agronomo-ia-${Date.now()}.${exts[tipo]}`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Erro ao gerar arquivo: ' + err.message);
+    } finally {
+      setGenerating('');
+    }
   }
 
   const hasContent = messages.filter(m => m.role === 'assistant').length > 1;
@@ -207,6 +197,12 @@ export default function ChatPage() {
     'Recomendacao de calagem para cafe no cerrado',
     'Qual a dose de adubacao para milho em solo argiloso?',
     'Como identificar deficiencia de boro no cafe?',
+  ];
+
+  const EXPORTS = [
+    { key: 'excel', label: 'Excel', icon: '📊' },
+    { key: 'pptx',  label: 'PowerPoint', icon: '📑' },
+    { key: 'docx',  label: 'Word', icon: '📝' },
   ];
 
   return (
@@ -241,12 +237,13 @@ export default function ChatPage() {
           </div>
           {hasContent && (
             <div className="flex gap-2">
-              <button onClick={() => generateDoc('txt')} disabled={!!generating} className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60">
-                <File className="w-3.5 h-3.5" />{generating === 'txt' ? 'Gerando...' : 'TXT'}
-              </button>
-              <button onClick={() => generateDoc('html')} disabled={!!generating} className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60">
-                <FileText className="w-3.5 h-3.5" />{generating === 'html' ? 'Gerando...' : 'HTML'}
-              </button>
+              {EXPORTS.map(({ key, label, icon }) => (
+                <button key={key} onClick={() => exportar(key)} disabled={!!generating}
+                  className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60">
+                  <span>{icon}</span>
+                  {generating === key ? 'Gerando...' : label}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -292,13 +289,12 @@ export default function ChatPage() {
         )}
 
         <form onSubmit={sendMessage} className="flex gap-2">
-          <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileSelect} />
-          <button type="button" onClick={() => fileRef.current?.click()}
-            className="btn-secondary px-3 flex-shrink-0" title="Anexar imagem ou documento">
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+          <button type="button" onClick={() => fileRef.current?.click()} className="btn-secondary px-3 flex-shrink-0" title="Anexar imagem">
             <Paperclip className="w-4 h-4" />
           </button>
           <input ref={inputRef} className="input flex-1"
-            placeholder={pendingImage ? "Adicione um comentario sobre a imagem (opcional)..." : "Digite sua duvida agronomica..."}
+            placeholder={pendingImage ? "Adicione um comentario (opcional)..." : "Digite sua duvida agronomica..."}
             value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
             disabled={loading} />
