@@ -1,7 +1,9 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2, Paperclip, X, Sheet, Presentation } from 'lucide-react';
+import { Send, Bot, User, Plus, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+
+const STORAGE_KEY = 'agronomo_conversa_ativa';
 
 const GREETING = `Ola! Sou o Agronomo IA.
 
@@ -21,7 +23,6 @@ function Mensagem({ msg }) {
   const hasImage = Array.isArray(msg.content);
   const textContent = hasImage ? msg.content.find(b => b.type === 'text')?.text || '' : msg.content;
   const imageBlock = hasImage ? msg.content.find(b => b.type === 'image') : null;
-
   return (
     <div className={`flex gap-3 ${isBot ? '' : 'flex-row-reverse'}`}>
       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isBot ? 'bg-primary-100' : 'bg-gray-200'}`}>
@@ -29,8 +30,8 @@ function Mensagem({ msg }) {
       </div>
       <div className="max-w-[80%] space-y-2">
         {imageBlock && (
-          <div className={`rounded-2xl overflow-hidden border border-gray-200 ${isBot ? '' : 'ml-auto'}`}>
-            <img src={`data:${imageBlock.media_type};base64,${imageBlock.data}`} alt="Imagem enviada" className="max-w-xs max-h-48 object-contain bg-gray-50" />
+          <div className="rounded-2xl overflow-hidden border border-gray-200">
+            <img src={`data:${imageBlock.media_type};base64,${imageBlock.data}`} alt="Imagem" className="max-w-xs max-h-48 object-contain bg-gray-50" />
           </div>
         )}
         {textContent && (
@@ -66,26 +67,65 @@ export default function ChatPage() {
   const supabase = createClient();
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
-  useEffect(() => { carregarConversas(); }, []);
+
+  // Carrega historico e restaura conversa ativa
+  useEffect(() => {
+    async function init() {
+      setLoadingHistory(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase.from('conversas_chat')
+        .select('id, titulo, updated_at').eq('agronomo_id', user.id)
+        .order('updated_at', { ascending: false }).limit(20);
+      setConversas(data || []);
+      setLoadingHistory(false);
+
+      // Restaura conversa ativa do localStorage
+      const savedId = localStorage.getItem(STORAGE_KEY);
+      if (savedId && data?.find(c => c.id === savedId)) {
+        const { data: conv } = await supabase.from('conversas_chat').select('messages').eq('id', savedId).single();
+        if (conv?.messages?.length > 0) {
+          setMessages([GREETING_MSG, ...conv.messages]);
+          setConversaId(savedId);
+        }
+      }
+    }
+    init();
+
+    // Limpa conversa ativa ao deslogar
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function carregarConversas() {
-    setLoadingHistory(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data } = await supabase.from('conversas_chat')
       .select('id, titulo, updated_at').eq('agronomo_id', user.id)
       .order('updated_at', { ascending: false }).limit(20);
     setConversas(data || []);
-    setLoadingHistory(false);
   }
 
   async function abrirConversa(conv) {
     const { data } = await supabase.from('conversas_chat').select('messages').eq('id', conv.id).single();
-    if (data?.messages) { setMessages([GREETING_MSG, ...data.messages]); setConversaId(conv.id); }
+    if (data?.messages) {
+      setMessages([GREETING_MSG, ...data.messages]);
+      setConversaId(conv.id);
+      localStorage.setItem(STORAGE_KEY, conv.id);
+    }
   }
 
-  async function novaConversa() {
-    setMessages([GREETING_MSG]); setConversaId(null); setInput(''); setPendingImage(null);
+  function novaConversa() {
+    setMessages([GREETING_MSG]);
+    setConversaId(null);
+    setInput('');
+    setPendingImage(null);
+    localStorage.removeItem(STORAGE_KEY);
     inputRef.current?.focus();
   }
 
@@ -105,9 +145,13 @@ export default function ChatPage() {
       : 'Conversa';
     if (conversaId) {
       await supabase.from('conversas_chat').update({ messages: msgs, titulo, updated_at: new Date().toISOString() }).eq('id', conversaId);
+      localStorage.setItem(STORAGE_KEY, conversaId);
     } else {
       const { data } = await supabase.from('conversas_chat').insert({ agronomo_id: user.id, titulo, messages: msgs }).select('id').single();
-      if (data?.id) setConversaId(data.id);
+      if (data?.id) {
+        setConversaId(data.id);
+        localStorage.setItem(STORAGE_KEY, data.id);
+      }
     }
     carregarConversas();
   }
@@ -168,8 +212,7 @@ export default function ChatPage() {
   }
 
   async function exportar(tipo) {
-    const assistantMsgs = messages.filter(m => m.role === 'assistant');
-    if (assistantMsgs.length < 2) return alert('Converse primeiro para gerar o arquivo.');
+    if (messages.filter(m => m.role === 'assistant').length < 2) return alert('Converse primeiro para gerar o arquivo.');
     setGenerating(tipo);
     try {
       const textMsgs = messages.filter(m => typeof m.content === 'string' && m.content !== GREETING);
@@ -181,14 +224,10 @@ export default function ChatPage() {
       const blob = await res.blob();
       const exts = { excel: 'xlsx', pptx: 'pptx', docx: 'docx' };
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `agronomo-ia-${Date.now()}.${exts[tipo]}`; a.click();
+      const a = document.createElement('a'); a.href = url; a.download = `agronomo-ia-${Date.now()}.${exts[tipo]}`; a.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('Erro ao gerar arquivo: ' + err.message);
-    } finally {
-      setGenerating('');
-    }
+    } catch (err) { alert('Erro: ' + err.message); }
+    finally { setGenerating(''); }
   }
 
   const hasContent = messages.filter(m => m.role === 'assistant').length > 1;
@@ -198,11 +237,10 @@ export default function ChatPage() {
     'Qual a dose de adubacao para milho em solo argiloso?',
     'Como identificar deficiencia de boro no cafe?',
   ];
-
   const EXPORTS = [
     { key: 'excel', label: 'Excel', icon: '📊' },
-    { key: 'pptx',  label: 'PowerPoint', icon: '📑' },
-    { key: 'docx',  label: 'Word', icon: '📝' },
+    { key: 'pptx', label: 'PowerPoint', icon: '📑' },
+    { key: 'docx', label: 'Word', icon: '📝' },
   ];
 
   return (
@@ -240,8 +278,7 @@ export default function ChatPage() {
               {EXPORTS.map(({ key, label, icon }) => (
                 <button key={key} onClick={() => exportar(key)} disabled={!!generating}
                   className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60">
-                  <span>{icon}</span>
-                  {generating === key ? 'Gerando...' : label}
+                  <span>{icon}</span>{generating === key ? 'Gerando...' : label}
                 </button>
               ))}
             </div>
