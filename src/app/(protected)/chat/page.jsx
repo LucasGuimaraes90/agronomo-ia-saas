@@ -3,14 +3,14 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
-const GREETING = `ð OlÃ¡! Sou o **AgrÃ´nomo IA**.
+const GREETING = `Ola! Sou o Agronomo IA.
 
 Posso ajudar com:
-- ð§ª AnÃ¡lise e interpretaÃ§Ã£o de solo
-- ð± RecomendaÃ§Ãµes de calagem e adubaÃ§Ã£o
-- ð¾ Manejo de culturas (cafÃ©, soja, milho e mais)
-- ð DiagnÃ³stico de pragas e doenÃ§as
-- ð GeraÃ§Ã£o de laudos tÃ©cnicos
+- Analise e interpretacao de solo
+- Recomendacoes de calagem e adubacao
+- Manejo de culturas (cafe, soja, milho e mais)
+- Diagnostico de pragas e doencas
+- Geracao de laudos tecnicos
 
 Como posso te ajudar hoje?`;
 
@@ -30,7 +30,7 @@ function Mensagem({ msg }) {
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/^## (.*)/gm, '<h2 class="font-bold text-base mt-2 mb-1">$1</h2>')
             .replace(/^### (.*)/gm, '<h3 class="font-semibold mt-2 mb-1">$1</h3>')
-            .replace(/^- (.*)/gm, '<span class="block pl-3">â¢ $1</span>')
+            .replace(/^- (.*)/gm, '<span class="block pl-3">- $1</span>')
             .replace(/\n\n/g, '<br/><br/>')
         }} />
       </div>
@@ -103,18 +103,14 @@ export default function ChatPage() {
     if (!user) return;
     const firstUser = msgs.find(m => m.role === 'user');
     const titulo = firstUser ? firstUser.content.substring(0, 60) : 'Conversa';
-
     if (conversaId) {
-      await supabase
-        .from('conversas_chat')
+      await supabase.from('conversas_chat')
         .update({ messages: msgs, titulo, updated_at: new Date().toISOString() })
         .eq('id', conversaId);
     } else {
-      const { data } = await supabase
-        .from('conversas_chat')
+      const { data } = await supabase.from('conversas_chat')
         .insert({ agronomo_id: user.id, titulo, messages: msgs })
-        .select('id')
-        .single();
+        .select('id').single();
       if (data?.id) setConversaId(data.id);
     }
     carregarConversas();
@@ -128,7 +124,6 @@ export default function ChatPage() {
     setMessages(newMessages);
     setInput('');
     setLoading(true);
-
     try {
       const allMsgs = newMessages.filter(m => m.content !== GREETING);
       const res = await fetch('/api/chat', {
@@ -140,10 +135,9 @@ export default function ChatPage() {
       const assistantMsg = { role: 'assistant', content: data.content || 'Erro ao processar.' };
       const finalMessages = [...newMessages, assistantMsg];
       setMessages(finalMessages);
-      const toSave = finalMessages.filter(m => m.content !== GREETING);
-      await salvarConversa(toSave);
+      await salvarConversa(finalMessages.filter(m => m.content !== GREETING));
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'â Erro de conexÃ£o. Tente novamente.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Erro de conexao. Tente novamente.' }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -151,8 +145,7 @@ export default function ChatPage() {
   }
 
   async function generateDoc(tipo) {
-    const assistantMsgs = messages.filter(m => m.role === 'assistant');
-    if (assistantMsgs.length < 2) return alert('Converse primeiro para gerar um documento.');
+    if (messages.filter(m => m.role === 'assistant').length < 2) return alert('Converse primeiro para gerar um documento.');
     setGenerating(tipo);
     try {
       const res = await fetch('/api/document', {
@@ -163,22 +156,17 @@ export default function ChatPage() {
       const { content } = await res.json();
       const nome = `agronomo_ia_${Date.now()}`;
       if (tipo === 'txt') {
-        const blob = new Blob([content], { type: 'text/plain' });
-        download(blob, `${nome}.txt`);
+        download(new Blob([content], { type: 'text/plain' }), `${nome}.txt`);
       } else if (tipo === 'html') {
-        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo TÃ©cnico</title>
+        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo Tecnico</title>
         <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6}
         h1,h2,h3{color:#15803d}table{border-collapse:collapse;width:100%}
         td,th{border:1px solid #ddd;padding:8px}th{background:#f0fdf4}</style></head>
         <body>${content.replace(/## (.*)/g,'<h2>$1</h2>').replace(/### (.*)/g,'<h3>$1</h3>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</body></html>`;
-        const blob = new Blob([html], { type: 'text/html' });
-        download(blob, `${nome}.html`);
+        download(new Blob([html], { type: 'text/html' }), `${nome}.html`);
       }
-    } catch {
-      alert('Erro ao gerar documento.');
-    } finally {
-      setGenerating('');
-    }
+    } catch { alert('Erro ao gerar documento.'); }
+    finally { setGenerating(''); }
   }
 
   function download(blob, filename) {
@@ -189,12 +177,11 @@ export default function ChatPage() {
   }
 
   const hasContent = messages.filter(m => m.role === 'assistant').length > 1;
-
   const sugestoes = [
-    'Analise este resultado de solo: pH 5.2, P 8 mg/dmÂ³, K 80 mg/dmÂ³',
-    'RecomendaÃ§Ã£o de calagem para cafÃ© no cerrado',
-    'Qual a dose de adubaÃ§Ã£o para milho em solo argiloso?',
-    'Como identificar deficiÃªncia de boro no cafÃ©?',
+    'Analise este resultado de solo: pH 5.2, P 8 mg/dm3, K 80 mg/dm3',
+    'Recomendacao de calagem para cafe no cerrado',
+    'Qual a dose de adubacao para milho em solo argiloso?',
+    'Como identificar deficiencia de boro no cafe?',
   ];
 
   return (
@@ -209,44 +196,35 @@ export default function ChatPage() {
           ) : conversas.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-4">Nenhuma conversa salva</p>
           ) : conversas.map(conv => (
-            <div
-              key={conv.id}
-              onClick={() => abrirConversa(conv)}
-              className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer text-xs transition-colors ${conversaId === conv.id ? 'bg-primary-50 text-primary-700' : 'hover:bg-gray-100 text-gray-600'}`}
-            >
+            <div key={conv.id} onClick={() => abrirConversa(conv)}
+              className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer text-xs transition-colors ${conversaId === conv.id ? 'bg-primary-50 text-primary-700' : 'hover:bg-gray-100 text-gray-600'}`}>
               <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 truncate">{conv.titulo}</span>
-              <button
-                onClick={e => deletarConversa(e, conv.id)}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-              >
+              <button onClick={e => deletarConversa(e, conv.id)}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
                 <Trash2 className="w-3 h-3" />
               </button>
             </div>
           ))}
         </div>
       </div>
-
       <div className="flex flex-col flex-1 min-w-0">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Chat AgrÃ´nomo IA</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Assistente tÃ©cnico com base EMBRAPA</p>
+            <h1 className="text-2xl font-bold text-gray-900">Chat Agronomo IA</h1>
+            <p className="text-gray-500 text-sm mt-0.5">Assistente tecnico especializado em agronomia</p>
           </div>
           {hasContent && (
             <div className="flex gap-2">
               <button onClick={() => generateDoc('txt')} disabled={!!generating} className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60">
-                <File className="w-3.5 h-3.5" />
-                {generating === 'txt' ? 'Gerando...' : 'TXT'}
+                <File className="w-3.5 h-3.5" />{generating === 'txt' ? 'Gerando...' : 'TXT'}
               </button>
               <button onClick={() => generateDoc('html')} disabled={!!generating} className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60">
-                <FileText className="w-3.5 h-3.5" />
-                {generating === 'html' ? 'Gerando...' : 'HTML'}
+                <FileText className="w-3.5 h-3.5" />{generating === 'html' ? 'Gerando...' : 'HTML'}
               </button>
             </div>
           )}
         </div>
-
         <div className="flex-1 card overflow-y-auto p-4 space-y-4 mb-4">
           {messages.map((msg, i) => <Mensagem key={i} msg={msg} />)}
           {loading && (
@@ -265,7 +243,6 @@ export default function ChatPage() {
           )}
           <div ref={bottomRef} />
         </div>
-
         {messages.length === 1 && (
           <div className="flex flex-wrap gap-2 mb-3">
             {sugestoes.map((s, i) => (
@@ -276,17 +253,12 @@ export default function ChatPage() {
             ))}
           </div>
         )}
-
         <form onSubmit={sendMessage} className="flex gap-2">
-          <input
-            ref={inputRef}
-            className="input flex-1"
-            placeholder="Digite sua dÃºvida agronÃ´mica..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
+          <input ref={inputRef} className="input flex-1"
+            placeholder="Digite sua duvida agronomica..."
+            value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
-            disabled={loading}
-          />
+            disabled={loading} />
           <button type="submit" disabled={!input.trim() || loading} className="btn-primary px-4 disabled:opacity-60">
             <Send className="w-4 h-4" />
           </button>
