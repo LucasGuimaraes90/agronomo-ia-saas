@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 const SYSTEM_PROMPT = `Você é o Agrônomo IA — assistente técnico especializado em agronomia brasileira.
 
@@ -21,16 +21,18 @@ Regras:
 export async function POST(req) {
   try {
     const { messages } = await req.json();
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.map(m => ({ role: m.role, content: m.content })),
+      ],
     });
 
-    return Response.json({ content: response.content[0].text });
+    return Response.json({ content: response.choices[0].message.content });
   } catch (err) {
     console.error('Chat API error:', err);
     return Response.json({ error: err.message }, { status: 500 });
