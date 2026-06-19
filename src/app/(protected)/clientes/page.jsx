@@ -5,46 +5,53 @@ import { Users, Plus, Search, Phone, MapPin, Edit2, Trash2, X, Camera, Navigatio
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
-// Upload direto via fetch (mais confiavel que Supabase JS client para storage)
-async function uploadFoto(file, pasta) {
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // Comprime a imagem
-  const blob = await new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 800;
-        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+// Upload via API route server-side (evita CORS e problemas de auth no browser)
+async function uploadFoto(supabase, file, pasta) {
+  try {
+    // Comprime imagem no browser
+    const blob = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 800;
+          const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((b) => resolve(b || file), 'image/jpeg', 0.82);
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
       };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
 
-  const nome = pasta + '/' + Date.now() + '.jpg';
-  const r = await fetch(SUPABASE_URL + '/storage/v1/object/fotos/' + nome, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + ANON_KEY,
-      'apikey': ANON_KEY,
-      'Content-Type': 'image/jpeg',
-    },
-    body: blob,
-  });
+    // Pega token da sessao do usuario
+    const { data: { session } } = await supabase.auth.getSession();
 
-  if (!r.ok) {
-    console.error('Erro upload foto:', await r.text());
+    const fd = new FormData();
+    fd.append('file', blob, 'foto.jpg');
+    fd.append('pasta', pasta);
+    if (session?.access_token) fd.append('token', session.access_token);
+
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const data = await r.json();
+
+    if (!r.ok) {
+      console.error('Erro upload:', data.error);
+      alert('Erro ao salvar foto: ' + data.error);
+      return null;
+    }
+
+    return data.url;
+  } catch (err) {
+    console.error('Erro upload catch:', err);
+    alert('Erro inesperado no upload: ' + err.message);
     return null;
   }
-  return SUPABASE_URL + '/storage/v1/object/public/fotos/' + nome;
 }
 
 function Lightbox({ src, alt, onClose }) {
@@ -71,7 +78,7 @@ function FotoClicavel({ src, alt, className, fallback }) {
     <>
       <div className="relative group cursor-zoom-in" onClick={() => setLb(true)}>
         <img src={src} alt={alt} className={className} />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-inherit flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
           <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
@@ -117,7 +124,7 @@ function ClienteModal({ cliente, onClose, onSave }) {
   const [previewCliente, setPreviewCliente] = useState(cliente?.foto_url || null);
   const [previewProp, setPreviewProp] = useState(cliente?._prop?.foto_url || null);
   const [saving, setSaving] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState('');
+  const [status, setStatus] = useState('');
 
   function handleFotoCliente(file) { if (!file) return; setFotoCliente(file); setPreviewCliente(URL.createObjectURL(file)); }
   function handleFotoProp(file) { if (!file) return; setFotoProp(file); setPreviewProp(URL.createObjectURL(file)); }
@@ -125,25 +132,23 @@ function ClienteModal({ cliente, onClose, onSave }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
 
-    let fotoClienteUrl = form.foto_url;
-    let fotoPropUrl = prop.foto_url;
+    const { data: { user } } = await supabase.auth.getUser();
+    let fotoClienteUrl = form.foto_url || '';
+    let fotoPropUrl = prop.foto_url || '';
 
     if (fotoCliente) {
-      setUploadStatus('Enviando foto do produtor...');
-      const url = await uploadFoto(fotoCliente, 'clientes');
+      setStatus('Enviando foto do produtor...');
+      const url = await uploadFoto(supabase, fotoCliente, 'clientes');
       if (url) fotoClienteUrl = url;
-      else setUploadStatus('Aviso: foto do produtor nao foi salva');
     }
     if (fotoProp) {
-      setUploadStatus('Enviando foto da fazenda...');
-      const url = await uploadFoto(fotoProp, 'propriedades');
+      setStatus('Enviando foto da fazenda...');
+      const url = await uploadFoto(supabase, fotoProp, 'propriedades');
       if (url) fotoPropUrl = url;
-      else setUploadStatus('Aviso: foto da fazenda nao foi salva');
     }
 
-    setUploadStatus('Salvando dados...');
+    setStatus('Salvando...');
     const clientePayload = { ...form, foto_url: fotoClienteUrl, agronomo_id: user.id };
     let clienteId = cliente?.id;
 
@@ -164,7 +169,7 @@ function ClienteModal({ cliente, onClose, onSave }) {
     }
 
     setSaving(false);
-    setUploadStatus('');
+    setStatus('');
     onSave();
   }
 
@@ -189,17 +194,17 @@ function ClienteModal({ cliente, onClose, onSave }) {
             <p className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-3">Dados do produtor</p>
             <FotoUpload label="Foto do produtor" preview={previewCliente} onSelect={handleFotoCliente} />
           </div>
-          {f('nome','Nome completo *','text','Joao da Silva')}
+          {f('nome','Nome completo *')}
           <div className="grid grid-cols-2 gap-3">
-            {f('telefone','Telefone','tel','(35) 99999-9999')}
-            {f('email','E-mail','email','joao@email.com')}
+            {f('telefone','Telefone','tel')}
+            {f('email','E-mail','email')}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {f('cpf_cnpj','CPF / CNPJ','text','000.000.000-00')}
-            {f('cultura_principal','Cultura principal','text','Cafe, Milho...')}
+            {f('cpf_cnpj','CPF / CNPJ')}
+            {f('cultura_principal','Cultura principal')}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {f('municipio','Municipio','text','Passos')}
+            {f('municipio','Municipio')}
             <div>
               <label className="label">Estado</label>
               <select className="input" value={form.estado} onChange={e=>setForm(p=>({...p,estado:e.target.value}))}>
@@ -209,7 +214,7 @@ function ClienteModal({ cliente, onClose, onSave }) {
           </div>
           <div>
             <label className="label">Observacoes do produtor</label>
-            <textarea className="input h-20 resize-none" placeholder="Preferencias, historico, particularidades..."
+            <textarea className="input h-20 resize-none" placeholder="Preferencias, historico..."
               value={form.observacoes||''} onChange={e=>setForm(p=>({...p,observacoes:e.target.value}))} />
           </div>
 
@@ -223,7 +228,7 @@ function ClienteModal({ cliente, onClose, onSave }) {
             {f('cultura','Cultura','text','Cafe','prop')}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {f('municipio','Municipio','text','Passos','prop')}
+            {f('municipio','Municipio','text','','prop')}
             <div>
               <label className="label">Estado</label>
               <select className="input" value={prop.estado||'MG'} onChange={e=>setProp(p=>({...p,estado:e.target.value}))}>
@@ -243,11 +248,10 @@ function ClienteModal({ cliente, onClose, onSave }) {
                 </a>
               )}
             </div>
-            <p className="text-xs text-gray-400 mt-1">Abra o Maps, marque o local, Compartilhar e cole aqui</p>
           </div>
           <div>
             <label className="label">Talhoes / Areas</label>
-            <textarea className="input h-16 resize-none" placeholder="Talhao A: 50ha cafe, Talhao B: 30ha..."
+            <textarea className="input h-16 resize-none" placeholder="Talhao A: 50ha cafe..."
               value={prop.talhoes||''} onChange={e=>setProp(p=>({...p,talhoes:e.target.value}))} />
           </div>
           <div>
@@ -256,15 +260,15 @@ function ClienteModal({ cliente, onClose, onSave }) {
               value={prop.observacoes||''} onChange={e=>setProp(p=>({...p,observacoes:e.target.value}))} />
           </div>
 
-          {uploadStatus && (
+          {status && (
             <div className="bg-blue-50 text-blue-700 text-xs px-3 py-2 rounded-lg flex items-center gap-2">
               <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600 flex-shrink-0" />
-              {uploadStatus}
+              {status}
             </div>
           )}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={saving}>Cancelar</button>
+            <button type="button" onClick={onClose} disabled={saving} className="btn-secondary flex-1">Cancelar</button>
             <button type="submit" disabled={!form.nome || saving} className="btn-primary flex-1 disabled:opacity-60">
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
