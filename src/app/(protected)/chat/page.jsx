@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2 } from 'lucide-react';
+import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
 const GREETING = `Ola! Sou o Agronomo IA.
@@ -12,27 +12,40 @@ Posso ajudar com:
 - Diagnostico de pragas e doencas
 - Geracao de laudos tecnicos
 
-Como posso te ajudar hoje?`;
+Voce pode enviar texto ou anexar uma foto/imagem do laudo de solo para eu analisar!`;
 
 const GREETING_MSG = { role: 'assistant', content: GREETING };
 
 function Mensagem({ msg }) {
   const isBot = msg.role === 'assistant';
+  const hasImage = Array.isArray(msg.content);
+  const textContent = hasImage ? msg.content.find(b => b.type === 'text')?.text || '' : msg.content;
+  const imageBlock = hasImage ? msg.content.find(b => b.type === 'image') : null;
+
   return (
     <div className={`flex gap-3 ${isBot ? '' : 'flex-row-reverse'}`}>
       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isBot ? 'bg-primary-100' : 'bg-gray-200'}`}>
         {isBot ? <Bot className="w-4 h-4 text-primary-600" /> : <User className="w-4 h-4 text-gray-600" />}
       </div>
-      <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isBot ? 'bg-white border border-gray-200 text-gray-800' : 'bg-primary-600 text-white'}`}>
-        <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{
-          __html: msg.content
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/^## (.*)/gm, '<h2 class="font-bold text-base mt-2 mb-1">$1</h2>')
-            .replace(/^### (.*)/gm, '<h3 class="font-semibold mt-2 mb-1">$1</h3>')
-            .replace(/^- (.*)/gm, '<span class="block pl-3">- $1</span>')
-            .replace(/\n\n/g, '<br/><br/>')
-        }} />
+      <div className={`max-w-[80%] space-y-2`}>
+        {imageBlock && (
+          <div className={`rounded-2xl overflow-hidden border border-gray-200 ${isBot ? '' : 'ml-auto'}`}>
+            <img src={`data:${imageBlock.media_type};base64,${imageBlock.data}`} alt="Imagem enviada" className="max-w-xs max-h-48 object-contain bg-gray-50" />
+          </div>
+        )}
+        {textContent && (
+          <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isBot ? 'bg-white border border-gray-200 text-gray-800' : 'bg-primary-600 text-white'}`}>
+            <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{
+              __html: textContent
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/^## (.*)/gm, '<h2 class="font-bold text-base mt-2 mb-1">$1</h2>')
+                .replace(/^### (.*)/gm, '<h3 class="font-semibold mt-2 mb-1">$1</h3>')
+                .replace(/^- (.*)/gm, '<span class="block pl-3">- $1</span>')
+                .replace(/\n\n/g, '<br/><br/>')
+            }} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -46,48 +59,33 @@ export default function ChatPage() {
   const [conversas, setConversas] = useState([]);
   const [conversaId, setConversaId] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [pendingImage, setPendingImage] = useState(null); // { data, media_type, name }
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const fileRef = useRef(null);
   const supabase = createClient();
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
-
-  useEffect(() => {
-    carregarConversas();
-  }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+  useEffect(() => { carregarConversas(); }, []);
 
   async function carregarConversas() {
     setLoadingHistory(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase
-      .from('conversas_chat')
-      .select('id, titulo, updated_at')
-      .eq('agronomo_id', user.id)
-      .order('updated_at', { ascending: false })
-      .limit(20);
+    const { data } = await supabase.from('conversas_chat')
+      .select('id, titulo, updated_at').eq('agronomo_id', user.id)
+      .order('updated_at', { ascending: false }).limit(20);
     setConversas(data || []);
     setLoadingHistory(false);
   }
 
   async function abrirConversa(conv) {
-    const { data } = await supabase
-      .from('conversas_chat')
-      .select('messages')
-      .eq('id', conv.id)
-      .single();
-    if (data?.messages) {
-      setMessages([GREETING_MSG, ...data.messages]);
-      setConversaId(conv.id);
-    }
+    const { data } = await supabase.from('conversas_chat').select('messages').eq('id', conv.id).single();
+    if (data?.messages) { setMessages([GREETING_MSG, ...data.messages]); setConversaId(conv.id); }
   }
 
   async function novaConversa() {
-    setMessages([GREETING_MSG]);
-    setConversaId(null);
-    setInput('');
+    setMessages([GREETING_MSG]); setConversaId(null); setInput(''); setPendingImage(null);
     inputRef.current?.focus();
   }
 
@@ -102,30 +100,56 @@ export default function ChatPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const firstUser = msgs.find(m => m.role === 'user');
-    const titulo = firstUser ? firstUser.content.substring(0, 60) : 'Conversa';
+    const titulo = firstUser
+      ? (Array.isArray(firstUser.content) ? firstUser.content.find(b => b.type === 'text')?.text : firstUser.content)?.substring(0, 60) || 'Imagem enviada'
+      : 'Conversa';
     if (conversaId) {
-      await supabase.from('conversas_chat')
-        .update({ messages: msgs, titulo, updated_at: new Date().toISOString() })
-        .eq('id', conversaId);
+      await supabase.from('conversas_chat').update({ messages: msgs, titulo, updated_at: new Date().toISOString() }).eq('id', conversaId);
     } else {
-      const { data } = await supabase.from('conversas_chat')
-        .insert({ agronomo_id: user.id, titulo, messages: msgs })
-        .select('id').single();
+      const { data } = await supabase.from('conversas_chat').insert({ agronomo_id: user.id, titulo, messages: msgs }).select('id').single();
       if (data?.id) setConversaId(data.id);
     }
     carregarConversas();
   }
 
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target.result.split(',')[1];
+      setPendingImage({ data: base64, media_type: file.type || 'image/jpeg', name: file.name });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
   async function sendMessage(e) {
     e?.preventDefault();
-    if (!input.trim() || loading) return;
-    const userMsg = { role: 'user', content: input.trim() };
+    if ((!input.trim() && !pendingImage) || loading) return;
+
+    let userContent;
+    if (pendingImage) {
+      userContent = [
+        { type: 'image', data: pendingImage.data, media_type: pendingImage.media_type },
+        { type: 'text', text: input.trim() || 'Analise esta imagem e me ajude com as recomendacoes agronomicas.' },
+      ];
+    } else {
+      userContent = input.trim();
+    }
+
+    const userMsg = { role: 'user', content: userContent };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
+    setPendingImage(null);
     setLoading(true);
+
     try {
-      const allMsgs = newMessages.filter(m => m.content !== GREETING);
+      const allMsgs = newMessages.filter(m => {
+        const txt = Array.isArray(m.content) ? m.content.find(b => b.type === 'text')?.text : m.content;
+        return txt !== GREETING;
+      });
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,7 +159,10 @@ export default function ChatPage() {
       const assistantMsg = { role: 'assistant', content: data.content || 'Erro ao processar.' };
       const finalMessages = [...newMessages, assistantMsg];
       setMessages(finalMessages);
-      await salvarConversa(finalMessages.filter(m => m.content !== GREETING));
+      await salvarConversa(finalMessages.filter(m => {
+        const txt = Array.isArray(m.content) ? m.content.find(b => b.type === 'text')?.text : m.content;
+        return txt !== GREETING;
+      }));
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Erro de conexao. Tente novamente.' }]);
     } finally {
@@ -149,15 +176,13 @@ export default function ChatPage() {
     setGenerating(tipo);
     try {
       const res = await fetch('/api/document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages }),
       });
       const { content } = await res.json();
       const nome = `agronomo_ia_${Date.now()}`;
-      if (tipo === 'txt') {
-        download(new Blob([content], { type: 'text/plain' }), `${nome}.txt`);
-      } else if (tipo === 'html') {
+      if (tipo === 'txt') download(new Blob([content], { type: 'text/plain' }), `${nome}.txt`);
+      else if (tipo === 'html') {
         const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo Tecnico</title>
         <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6}
         h1,h2,h3{color:#15803d}table{border-collapse:collapse;width:100%}
@@ -200,14 +225,14 @@ export default function ChatPage() {
               className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer text-xs transition-colors ${conversaId === conv.id ? 'bg-primary-50 text-primary-700' : 'hover:bg-gray-100 text-gray-600'}`}>
               <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 truncate">{conv.titulo}</span>
-              <button onClick={e => deletarConversa(e, conv.id)}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
+              <button onClick={e => deletarConversa(e, conv.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
                 <Trash2 className="w-3 h-3" />
               </button>
             </div>
           ))}
         </div>
       </div>
+
       <div className="flex flex-col flex-1 min-w-0">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -225,6 +250,7 @@ export default function ChatPage() {
             </div>
           )}
         </div>
+
         <div className="flex-1 card overflow-y-auto p-4 space-y-4 mb-4">
           {messages.map((msg, i) => <Mensagem key={i} msg={msg} />)}
           {loading && (
@@ -243,7 +269,8 @@ export default function ChatPage() {
           )}
           <div ref={bottomRef} />
         </div>
-        {messages.length === 1 && (
+
+        {messages.length === 1 && !pendingImage && (
           <div className="flex flex-wrap gap-2 mb-3">
             {sugestoes.map((s, i) => (
               <button key={i} onClick={() => { setInput(s); inputRef.current?.focus(); }}
@@ -253,13 +280,29 @@ export default function ChatPage() {
             ))}
           </div>
         )}
+
+        {pendingImage && (
+          <div className="mb-2 flex items-center gap-2 bg-primary-50 border border-primary-200 rounded-xl px-3 py-2">
+            <img src={`data:${pendingImage.media_type};base64,${pendingImage.data}`} alt="preview" className="w-10 h-10 object-cover rounded-lg" />
+            <span className="text-xs text-primary-700 flex-1 truncate">{pendingImage.name}</span>
+            <button onClick={() => setPendingImage(null)} className="text-primary-400 hover:text-primary-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         <form onSubmit={sendMessage} className="flex gap-2">
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileSelect} />
+          <button type="button" onClick={() => fileRef.current?.click()}
+            className="btn-secondary px-3 flex-shrink-0" title="Anexar imagem ou documento">
+            <Paperclip className="w-4 h-4" />
+          </button>
           <input ref={inputRef} className="input flex-1"
-            placeholder="Digite sua duvida agronomica..."
+            placeholder={pendingImage ? "Adicione um comentario sobre a imagem (opcional)..." : "Digite sua duvida agronomica..."}
             value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
             disabled={loading} />
-          <button type="submit" disabled={!input.trim() || loading} className="btn-primary px-4 disabled:opacity-60">
+          <button type="submit" disabled={(!input.trim() && !pendingImage) || loading} className="btn-primary px-4 disabled:opacity-60">
             <Send className="w-4 h-4" />
           </button>
         </form>
