@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
 const PROMPT_DOCUMENTO = `Você é um formatador de documentos agronômicos profissionais.
 Com base na conversa técnica abaixo, gere um RELATÓRIO COMPLETO E ESTRUTURADO em markdown.
@@ -22,21 +22,19 @@ ESTRUTURA OBRIGATÓRIA:
 export async function POST(req) {
   try {
     const { messages } = await req.json();
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new Anthropic({ apiKey: process.env.OPENAI_API_KEY });
 
     const apiMsgs = messages.filter(m => m.role !== 'system');
     apiMsgs.push({ role: 'user', content: 'Gere o relatório técnico completo desta análise.' });
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
-      messages: [
-        { role: 'system', content: PROMPT_DOCUMENTO },
-        ...apiMsgs.map(m => ({ role: m.role, content: m.content })),
-      ],
+      system: PROMPT_DOCUMENTO,
+      messages: apiMsgs,
     });
 
-    return Response.json({ content: response.choices[0].message.content });
+    return Response.json({ content: response.content[0].text });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
