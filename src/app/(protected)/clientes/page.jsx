@@ -5,10 +5,8 @@ import { Users, Plus, Search, Phone, MapPin, Edit2, Trash2, X, Camera, Navigatio
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
-// Upload via API route server-side (evita CORS e problemas de auth no browser)
 async function uploadFoto(supabase, file, pasta) {
   try {
-    // Comprime imagem no browser
     const blob = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -28,32 +26,18 @@ async function uploadFoto(supabase, file, pasta) {
       reader.onerror = () => resolve(file);
       reader.readAsDataURL(file);
     });
-
-    // Pega token da sessao do usuario
-    const { data: { session } } = await supabase.auth.getSession();
-
     const fd = new FormData();
     fd.append('file', blob, 'foto.jpg');
     fd.append('pasta', pasta);
-    if (session?.access_token) fd.append('token', session.access_token);
-
     const r = await fetch('/api/upload', { method: 'POST', body: fd });
     const data = await r.json();
-
-    if (!r.ok) {
-      console.error('Erro upload:', data.error);
-      alert('Erro ao salvar foto: ' + data.error);
-      return null;
-    }
-
+    if (!r.ok) { alert('Erro ao salvar foto: ' + data.error); return null; }
     return data.url;
   } catch (err) {
-    console.error('Erro upload catch:', err);
     alert('Erro inesperado no upload: ' + err.message);
     return null;
   }
 }
-
 function Lightbox({ src, alt, onClose }) {
   useEffect(() => {
     const fn = (e) => { if (e.key === 'Escape') onClose(); };
@@ -110,7 +94,6 @@ function FotoUpload({ label, preview, onSelect }) {
     </div>
   );
 }
-
 function ClienteModal({ cliente, onClose, onSave }) {
   const supabase = createClient();
   const [form, setForm] = useState(cliente || {
@@ -132,47 +115,56 @@ function ClienteModal({ cliente, onClose, onSave }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let fotoClienteUrl = form.foto_url || '';
+      let fotoPropUrl = prop.foto_url || '';
 
-    const { data: { user } } = await supabase.auth.getUser();
-    let fotoClienteUrl = form.foto_url || '';
-    let fotoPropUrl = prop.foto_url || '';
-
-    if (fotoCliente) {
-      setStatus('Enviando foto do produtor...');
-      const url = await uploadFoto(supabase, fotoCliente, 'clientes');
-      if (url) fotoClienteUrl = url;
-    }
-    if (fotoProp) {
-      setStatus('Enviando foto da fazenda...');
-      const url = await uploadFoto(supabase, fotoProp, 'propriedades');
-      if (url) fotoPropUrl = url;
-    }
-
-    setStatus('Salvando...');
-    const clientePayload = { ...form, foto_url: fotoClienteUrl, agronomo_id: user.id };
-    let clienteId = cliente?.id;
-
-    if (clienteId) {
-      await supabase.from('clientes').update(clientePayload).eq('id', clienteId);
-    } else {
-      const { data } = await supabase.from('clientes').insert(clientePayload).select('id').single();
-      clienteId = data?.id;
-    }
-
-    if (clienteId && prop.nome) {
-      const propPayload = { ...prop, foto_url: fotoPropUrl, cliente_id: clienteId, agronomo_id: user.id };
-      if (cliente?._prop?.id) {
-        await supabase.from('propriedades').update(propPayload).eq('id', cliente._prop.id);
-      } else {
-        await supabase.from('propriedades').insert(propPayload);
+      if (fotoCliente) {
+        setStatus('Enviando foto do produtor...');
+        const url = await uploadFoto(supabase, fotoCliente, 'clientes');
+        if (url) fotoClienteUrl = url;
       }
+      if (fotoProp) {
+        setStatus('Enviando foto da fazenda...');
+        const url = await uploadFoto(supabase, fotoProp, 'propriedades');
+        if (url) fotoPropUrl = url;
+      }
+
+      setStatus('Salvando...');
+      const clientePayload = { ...form, foto_url: fotoClienteUrl, agronomo_id: user.id, ativo: true };
+      let clienteId = cliente?.id;
+
+      if (clienteId) {
+        const { error } = await supabase.from('clientes').update(clientePayload).eq('id', clienteId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from('clientes').insert(clientePayload).select('id').single();
+        if (error) throw error;
+        clienteId = data?.id;
+      }
+
+      if (clienteId && prop.nome) {
+        const propPayload = { ...prop, foto_url: fotoPropUrl, cliente_id: clienteId, agronomo_id: user.id };
+        if (cliente?._prop?.id) {
+          const { error } = await supabase.from('propriedades').update(propPayload).eq('id', cliente._prop.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('propriedades').insert(propPayload);
+          if (error) throw error;
+        }
+      }
+
+      setSaving(false);
+      setStatus('');
+      onSave();
+    } catch (err) {
+      console.error('Erro ao salvar:', err);
+      alert('Erro ao salvar: ' + (err.message || JSON.stringify(err)));
+      setSaving(false);
+      setStatus('');
     }
-
-    setSaving(false);
-    setStatus('');
-    onSave();
   }
-
   const f = (key, label, type='text', placeholder='', obj='form') => (
     <div>
       <label className="label">{label}</label>
@@ -217,7 +209,6 @@ function ClienteModal({ cliente, onClose, onSave }) {
             <textarea className="input h-20 resize-none" placeholder="Preferencias, historico..."
               value={form.observacoes||''} onChange={e=>setForm(p=>({...p,observacoes:e.target.value}))} />
           </div>
-
           <div className="pt-3 border-t border-gray-100">
             <p className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-3">Propriedade / Fazenda</p>
             <FotoUpload label="Foto da fazenda" preview={previewProp} onSelect={handleFotoProp} />
@@ -259,14 +250,12 @@ function ClienteModal({ cliente, onClose, onSave }) {
             <textarea className="input h-20 resize-none" placeholder="Solo, historico, problemas frequentes..."
               value={prop.observacoes||''} onChange={e=>setProp(p=>({...p,observacoes:e.target.value}))} />
           </div>
-
           {status && (
             <div className="bg-blue-50 text-blue-700 text-xs px-3 py-2 rounded-lg flex items-center gap-2">
               <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600 flex-shrink-0" />
               {status}
             </div>
           )}
-
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} disabled={saving} className="btn-secondary flex-1">Cancelar</button>
             <button type="submit" disabled={!form.nome || saving} className="btn-primary flex-1 disabled:opacity-60">
@@ -278,7 +267,6 @@ function ClienteModal({ cliente, onClose, onSave }) {
     </div>
   );
 }
-
 export default function ClientesPage() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -322,12 +310,10 @@ export default function ClientesPage() {
           <Plus className="w-4 h-4" /> Novo cliente
         </button>
       </div>
-
       <div className="relative mb-5">
         <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
         <input className="input pl-9" placeholder="Buscar por nome, fazenda ou municipio..." value={busca} onChange={e=>setBusca(e.target.value)} />
       </div>
-
       {loading ? (
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>
       ) : filtrados.length === 0 ? (
@@ -391,7 +377,6 @@ export default function ClientesPage() {
           ))}
         </div>
       )}
-
       {modal && (
         <ClienteModal
           cliente={modal === 'new' ? null : modal}
