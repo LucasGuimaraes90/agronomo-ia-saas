@@ -1,12 +1,30 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { MapPin, Search, Navigation, User } from 'lucide-react';
+import { MapPin, Search, Navigation, User, X, ZoomIn } from 'lucide-react';
+
+function Lightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-[100] p-4" onClick={onClose}>
+      <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={onClose}>
+        <X className="w-7 h-7" />
+      </button>
+      <img src={src} alt={alt} className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
+        onClick={e => e.stopPropagation()} />
+    </div>
+  );
+}
 
 export default function PropriedadesPage() {
   const [props, setProps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  const [lightbox, setLightbox] = useState(null);
   const supabase = createClient();
 
   async function load() {
@@ -56,16 +74,21 @@ export default function PropriedadesPage() {
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtrados.map(p => (
             <div key={p.id} className="card overflow-hidden hover:shadow-md transition-shadow">
-              {/* Foto da fazenda */}
-              <div className="relative h-40 bg-gradient-to-br from-green-100 to-green-200">
+              {/* Foto da fazenda clicavel */}
+              <div className="relative h-40 bg-gradient-to-br from-green-100 to-green-200 group cursor-zoom-in"
+                onClick={() => p.foto_url && setLightbox({ src: p.foto_url, alt: p.nome })}>
                 {p.foto_url ? (
-                  <img src={p.foto_url} alt={p.nome} className="w-full h-full object-cover" />
+                  <>
+                    <img src={p.foto_url} alt={p.nome} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-full h-full flex items-center justify-center cursor-default">
                     <MapPin className="w-12 h-12 text-green-400 opacity-50" />
                   </div>
                 )}
-                {/* Badge cultura */}
                 {p.cultura && (
                   <span className="absolute top-2 right-2 bg-white/90 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
                     {p.cultura}
@@ -73,13 +96,12 @@ export default function PropriedadesPage() {
                 )}
               </div>
 
-              {/* Info */}
               <div className="p-4">
                 <h3 className="font-semibold text-gray-900 mb-1">{p.nome}</h3>
 
-                {/* Produtor */}
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 rounded-full bg-primary-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-primary-100 overflow-hidden flex items-center justify-center flex-shrink-0 cursor-zoom-in"
+                    onClick={() => p.clientes?.foto_url && setLightbox({ src: p.clientes.foto_url, alt: p.clientes.nome })}>
                     {p.clientes?.foto_url
                       ? <img src={p.clientes.foto_url} alt="" className="w-full h-full object-cover" />
                       : <User className="w-3.5 h-3.5 text-primary-600" />}
@@ -87,22 +109,17 @@ export default function PropriedadesPage() {
                   <span className="text-sm text-gray-600">{p.clientes?.nome || 'Sem cliente'}</span>
                 </div>
 
-                {/* Detalhes */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {p.hectares && <span className="badge-blue">{p.hectares} ha</span>}
                   {p.municipio && <span className="text-xs text-gray-400">{p.municipio}{p.estado ? ' / ' + p.estado : ''}</span>}
                 </div>
 
-                {p.talhoes && <p className="text-xs text-gray-400 mb-3 line-clamp-2">{p.talhoes}</p>}
+                {p.talhoes && <p className="text-xs text-gray-400 mb-2 line-clamp-2">{p.talhoes}</p>}
+                {p.observacoes && <p className="text-xs text-gray-400 italic mb-3 line-clamp-2 border-l-2 border-gray-100 pl-2">{p.observacoes}</p>}
 
-                {/* Botao Navegar */}
                 {p.localizacao_maps ? (
-                  <a
-                    href={p.localizacao_maps}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-center gap-2 w-full bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium py-2 rounded-xl transition-colors"
-                  >
+                  <a href={p.localizacao_maps} target="_blank" rel="noreferrer"
+                    className="flex items-center justify-center gap-2 w-full bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium py-2 rounded-xl transition-colors">
                     <Navigation className="w-4 h-4" />
                     Navegar ate a fazenda
                   </a>
@@ -114,6 +131,8 @@ export default function PropriedadesPage() {
           ))}
         </div>
       )}
+
+      {lightbox && <Lightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
