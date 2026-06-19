@@ -1,16 +1,16 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, FileText, File, Plus, MessageSquare, Trash2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase';
 
-const GREETING = `👋 Olá! Sou o **Agrônomo IA**.
+const GREETING = `ð OlÃ¡! Sou o **AgrÃ´nomo IA**.
 
 Posso ajudar com:
-- 🧪 Análise e interpretação de solo
-- 🌱 Recomendações de calagem e adubação
-- 🌾 Manejo de culturas (café, soja, milho e mais)
-- 🐛 Diagnóstico de pragas e doenças
-- 📋 Geração de laudos técnicos
+- ð§ª AnÃ¡lise e interpretaÃ§Ã£o de solo
+- ð± RecomendaÃ§Ãµes de calagem e adubaÃ§Ã£o
+- ð¾ Manejo de culturas (cafÃ©, soja, milho e mais)
+- ð DiagnÃ³stico de pragas e doenÃ§as
+- ð GeraÃ§Ã£o de laudos tÃ©cnicos
 
 Como posso te ajudar hoje?`;
 
@@ -30,7 +30,7 @@ function Mensagem({ msg }) {
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/^## (.*)/gm, '<h2 class="font-bold text-base mt-2 mb-1">$1</h2>')
             .replace(/^### (.*)/gm, '<h3 class="font-semibold mt-2 mb-1">$1</h3>')
-            .replace(/^- (.*)/gm, '<span class="block pl-3">• $1</span>')
+            .replace(/^- (.*)/gm, '<span class="block pl-3">â¢ $1</span>')
             .replace(/\n\n/g, '<br/><br/>')
         }} />
       </div>
@@ -143,7 +143,7 @@ export default function ChatPage() {
       const toSave = finalMessages.filter(m => m.content !== GREETING);
       await salvarConversa(toSave);
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro de conexão. Tente novamente.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'â Erro de conexÃ£o. Tente novamente.' }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -166,7 +166,7 @@ export default function ChatPage() {
         const blob = new Blob([content], { type: 'text/plain' });
         download(blob, `${nome}.txt`);
       } else if (tipo === 'html') {
-        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo Técnico</title>
+        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo TÃ©cnico</title>
         <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6}
         h1,h2,h3{color:#15803d}table{border-collapse:collapse;width:100%}
         td,th{border:1px solid #ddd;padding:8px}th{background:#f0fdf4}</style></head>
@@ -191,10 +191,10 @@ export default function ChatPage() {
   const hasContent = messages.filter(m => m.role === 'assistant').length > 1;
 
   const sugestoes = [
-    'Analise este resultado de solo: pH 5.2, P 8 mg/dm³, K 80 mg/dm³',
-    'Recomendação de calagem para café no cerrado',
-    'Qual a dose de adubação para milho em solo argiloso?',
-    'Como identificar deficiência de boro no café?',
+    'Analise este resultado de solo: pH 5.2, P 8 mg/dmÂ³, K 80 mg/dmÂ³',
+    'RecomendaÃ§Ã£o de calagem para cafÃ© no cerrado',
+    'Qual a dose de adubaÃ§Ã£o para milho em solo argiloso?',
+    'Como identificar deficiÃªncia de boro no cafÃ©?',
   ];
 
   return (
@@ -230,8 +230,8 @@ export default function ChatPage() {
       <div className="flex flex-col flex-1 min-w-0">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Chat Agrônomo IA</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Assistente técnico com base EMBRAPA</p>
+            <h1 className="text-2xl font-bold text-gray-900">Chat AgrÃ´nomo IA</h1>
+            <p className="text-gray-500 text-sm mt-0.5">Assistente tÃ©cnico com base EMBRAPA</p>
           </div>
           {hasContent && (
             <div className="flex gap-2">
@@ -281,7 +281,7 @@ export default function ChatPage() {
           <input
             ref={inputRef}
             className="input flex-1"
-            placeholder="Digite sua dúvida agronômica..."
+            placeholder="Digite sua dÃºvida agronÃ´mica..."
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
