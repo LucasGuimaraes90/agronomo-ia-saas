@@ -5,23 +5,24 @@ import { NextResponse } from 'next/server';
 
 const client = new Anthropic({ apiKey: process.env.OPENAI_API_KEY });
 
-const PROMPT_DOCUMENTO = `Você é um formatador de documentos agronômicos profissionais.
-Com base na conversa técnica abaixo, gere um RELATÓRIO COMPLETO E ESTRUTURADO em markdown.
+const PROMPT_DOCUMENTO = `Você é um especialista agronômico que gera documentos técnicos profissionais.
+Analise a conversa abaixo e gere um documento COMPLETO e ESTRUTURADO em markdown.
 
 REGRAS OBRIGATÓRIAS:
-- Comece DIRETAMENTE com o conteúdo — sem introduções ou meta-texto
+- A primeira linha deve ser: # TITULO DO DOCUMENTO (baseado no tema real da conversa)
 - Use ## para seções principais e ### para subseções
-- Inclua TODAS as informações técnicas: valores de pH, saturação de bases, doses, etc.
-- Seja preciso e completo — este é um documento técnico oficial
+- Adapte as seções AO TEMA REAL discutido — NÃO use estrutura genérica de análise de solo se o tema for outro
+- Inclua TODOS os dados técnicos, doses, valores e recomendações mencionados
+- Gere ao menos 5 seções (##) com conteúdo substancial
+- Seja preciso, técnico e completo
 
-ESTRUTURA OBRIGATÓRIA:
-## IDENTIFICAÇÃO DA LAVOURA
-## RESULTADOS DA ANÁLISE DE SOLO
-## NECESSIDADE DE CALAGEM
-## RECOMENDAÇÃO DE ADUBAÇÃO
-## CRONOGRAMA DE APLICAÇÃO
-## OBSERVAÇÕES TÉCNICAS
-## DISCLAIMER`;
+EXEMPLOS DE ADAPTAÇÃO:
+- Conversa sobre deficiência de boro na soja → seções: O que é Boro, Sintomas Visuais, Causas da Deficiência, Diagnóstico, Impactos na Produção, Recomendações de Correção, Doses Recomendadas, Manejo Preventivo
+- Conversa sobre análise de solo → seções: Identificação da Lavoura, Resultados, Calagem, Adubação, Cronograma, Observações
+- Conversa sobre pragas → seções: Identificação da Praga, Ciclo Biológico, Sintomas, Nível de Dano, Controle Químico, Controle Biológico, Monitoramento
+- Conversa sobre irrigação → seções: Necessidade Hídrica, Sistema Recomendado, Manejo, Cronograma
+
+Comece diretamente com o # TITULO — sem introduções, sem meta-texto.`;
 
 async function gerarConteudo(messages) {
   const apiMsgs = messages
@@ -45,11 +46,23 @@ async function gerarConteudo(messages) {
   return response.content[0].text;
 }
 
+function extrairTitulo(markdown) {
+  const linhas = markdown.split('\n');
+  for (const linha of linhas) {
+    if (linha.startsWith('# ') && !linha.startsWith('## ')) {
+      return linha.replace(/^# /, '').trim();
+    }
+  }
+  return 'Laudo Técnico Agronômico';
+}
+
 function parseSecoes(markdown) {
   const secoes = [];
   let atual = null;
 
   for (const linha of markdown.split('\n')) {
+    // Ignora o título principal (# Titulo)
+    if (linha.startsWith('# ') && !linha.startsWith('## ')) continue;
     if (linha.startsWith('## ')) {
       if (atual) secoes.push(atual);
       atual = { titulo: linha.replace('## ', '').trim(), linhas: [] };
@@ -82,12 +95,13 @@ function linhaParaParagrafo(linha) {
 
 async function gerarDocx(markdown) {
   const secoes = parseSecoes(markdown);
+  const titulo = extrairTitulo(markdown);
   const filhos = [
     new Paragraph({
-      text: 'Laudo Técnico Agronômico',
+      text: titulo,
       heading: HeadingLevel.HEADING_1,
     }),
-    new Paragraph({ text: `Gerado em: ${new Date().toLocaleDateString('pt-BR')}` }),
+    new Paragraph({ text: `Gerado em: ${new Date().toLocaleDateString('pt-BR')} • Agrônomo IA` }),
     new Paragraph({ text: '' }),
   ];
 
@@ -119,19 +133,23 @@ async function gerarPptx(markdown) {
   const PptxGenJS = pptxgenModule.default;
   const prs = new PptxGenJS();
 
+  const titulo = extrairTitulo(markdown);
   prs.layout = 'LAYOUT_WIDE';
   prs.author = 'Agrônomo IA';
-  prs.title = 'Laudo Técnico Agronômico';
+  prs.title = titulo;
 
   // Slide de capa
   const capa = prs.addSlide();
   capa.background = { color: '15803d' };
-  capa.addText('Laudo Técnico Agronômico', {
-    x: 0.5, y: 1.8, w: 9, h: 1.5,
-    fontSize: 40, bold: true, color: 'FFFFFF', align: 'center',
+  // Título dinâmico — quebra em 2 linhas se longo
+  const tituloFontSize = titulo.length > 50 ? 28 : titulo.length > 35 ? 32 : 38;
+  capa.addText(titulo, {
+    x: 0.5, y: 1.5, w: 9, h: 2.5,
+    fontSize: tituloFontSize, bold: true, color: 'FFFFFF', align: 'center',
+    wrap: true, valign: 'middle',
   });
   capa.addText(`Agrônomo IA  •  ${new Date().toLocaleDateString('pt-BR')}`, {
-    x: 0.5, y: 3.5, w: 9, h: 0.7,
+    x: 0.5, y: 4.2, w: 9, h: 0.7,
     fontSize: 18, color: 'BBFFBB', align: 'center',
   });
 
@@ -191,8 +209,9 @@ async function gerarXlsx(markdown) {
 
   // Cabeçalho
   sheet.mergeCells('A1:C1');
+  const tituloXlsx = extrairTitulo(markdown).toUpperCase();
   const tituloCell = sheet.getCell('A1');
-  tituloCell.value = 'LAUDO TÉCNICO AGRONÔMICO — Agrônomo IA';
+  tituloCell.value = tituloXlsx + ' — Agrônomo IA';
   tituloCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
   tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15803D' } };
   tituloCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -278,38 +297,4 @@ export async function POST(req) {
 
     if (!messages || !formato) {
       return NextResponse.json({ error: 'Parâmetros ausentes' }, { status: 400 });
-    }
-
-    const markdown = await gerarConteudo(messages);
-
-    let buffer, contentType, filename;
-
-    if (formato === 'docx') {
-      buffer = await gerarDocx(markdown);
-      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      filename = `laudo_agronomo_${Date.now()}.docx`;
-    } else if (formato === 'pptx') {
-      buffer = await gerarPptx(markdown);
-      contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      filename = `apresentacao_agronomo_${Date.now()}.pptx`;
-    } else if (formato === 'xlsx') {
-      buffer = await gerarXlsx(markdown);
-      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      filename = `dados_agronomo_${Date.now()}.xlsx`;
-    } else {
-      return NextResponse.json({ error: 'Formato inválido. Use: docx, pptx, xlsx' }, { status: 400 });
-    }
-
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': String(buffer.length || buffer.byteLength),
-      },
-    });
-  } catch (err) {
-    console.error('Export error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
+   
