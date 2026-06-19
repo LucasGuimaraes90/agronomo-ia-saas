@@ -1,10 +1,43 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Users, Plus, Search, Phone, Mail, MapPin, Edit2, Trash2, X, Camera, Navigation } from 'lucide-react';
+import { Users, Plus, Search, Phone, MapPin, Edit2, Trash2, X, Camera, Navigation, ZoomIn } from 'lucide-react';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+function Lightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-[100] p-4" onClick={onClose}>
+      <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={onClose}>
+        <X className="w-7 h-7" />
+      </button>
+      <img src={src} alt={alt} className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
+        onClick={e => e.stopPropagation()} />
+    </div>
+  );
+}
+
+function FotoClicavel({ src, alt, className, fallback }) {
+  const [lb, setLb] = useState(false);
+  if (!src) return fallback || null;
+  return (
+    <>
+      <div className="relative group cursor-zoom-in" onClick={() => setLb(true)}>
+        <img src={src} alt={alt} className={className} />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-inherit flex items-center justify-center">
+          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </div>
+      {lb && <Lightbox src={src} alt={alt} onClose={() => setLb(false)} />}
+    </>
+  );
+}
 
 function comprimirImagem(file, maxSize = 800) {
   return new Promise((resolve) => {
@@ -78,23 +111,18 @@ function ClienteModal({ cliente, onClose, onSave }) {
     e.preventDefault();
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
-
     let fotoClienteUrl = form.foto_url;
     let fotoPropUrl = prop.foto_url;
-
     if (fotoCliente) fotoClienteUrl = await uploadFoto(supabase, fotoCliente, 'clientes') || fotoClienteUrl;
     if (fotoProp) fotoPropUrl = await uploadFoto(supabase, fotoProp, 'propriedades') || fotoPropUrl;
-
     const clientePayload = { ...form, foto_url: fotoClienteUrl, agronomo_id: user.id };
     let clienteId = cliente?.id;
-
     if (clienteId) {
       await supabase.from('clientes').update(clientePayload).eq('id', clienteId);
     } else {
       const { data } = await supabase.from('clientes').insert(clientePayload).select('id').single();
       clienteId = data?.id;
     }
-
     if (clienteId && prop.nome) {
       const propPayload = { ...prop, foto_url: fotoPropUrl, cliente_id: clienteId, agronomo_id: user.id };
       if (cliente?._prop?.id) {
@@ -103,7 +131,6 @@ function ClienteModal({ cliente, onClose, onSave }) {
         await supabase.from('propriedades').insert(propPayload);
       }
     }
-
     setSaving(false);
     onSave();
   }
@@ -125,8 +152,6 @@ function ClienteModal({ cliente, onClose, onSave }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-
-          {/* DADOS DO CLIENTE */}
           <div className="pb-2">
             <p className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-3">Dados do produtor</p>
             <FotoUpload label="Foto do produtor" preview={previewCliente} onSelect={handleFotoCliente} />
@@ -144,7 +169,7 @@ function ClienteModal({ cliente, onClose, onSave }) {
             {f('municipio','Municipio','text','Passos')}
             <div>
               <label className="label">Estado</label>
-              <select className="input" value={form.estado} onChange={e => setForm(p=>({...p,estado:e.target.value}))}>
+              <select className="input" value={form.estado} onChange={e=>setForm(p=>({...p,estado:e.target.value}))}>
                 {ESTADOS.map(uf=><option key={uf}>{uf}</option>)}
               </select>
             </div>
@@ -154,8 +179,6 @@ function ClienteModal({ cliente, onClose, onSave }) {
             <textarea className="input h-20 resize-none" placeholder="Preferencias, historico, particularidades do produtor..."
               value={form.observacoes||''} onChange={e=>setForm(p=>({...p,observacoes:e.target.value}))} />
           </div>
-
-          {/* PROPRIEDADE */}
           <div className="pt-3 border-t border-gray-100">
             <p className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-3">Propriedade / Fazenda</p>
             <FotoUpload label="Foto da fazenda" preview={previewProp} onSelect={handleFotoProp} />
@@ -198,7 +221,6 @@ function ClienteModal({ cliente, onClose, onSave }) {
             <textarea className="input h-20 resize-none" placeholder="Solo, historico de culturas, problemas frequentes, anotacoes tecnicas..."
               value={prop.observacoes||''} onChange={e=>setProp(p=>({...p,observacoes:e.target.value}))} />
           </div>
-
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
             <button type="submit" disabled={!form.nome || saving} className="btn-primary flex-1 disabled:opacity-60">
@@ -274,9 +296,8 @@ export default function ClientesPage() {
             <div key={c.id} className="card p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start gap-3 mb-3">
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-primary-100 flex-shrink-0 flex items-center justify-center">
-                  {c.foto_url
-                    ? <img src={c.foto_url} alt={c.nome} className="w-full h-full object-cover" />
-                    : <span className="text-primary-700 font-bold text-lg">{c.nome.charAt(0).toUpperCase()}</span>}
+                  <FotoClicavel src={c.foto_url} alt={c.nome} className="w-full h-full object-cover"
+                    fallback={<span className="text-primary-700 font-bold text-lg">{c.nome.charAt(0).toUpperCase()}</span>} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 truncate">{c.nome}</h3>
@@ -305,7 +326,9 @@ export default function ClientesPage() {
                 <div className="border-t border-gray-100 pt-3">
                   <div className="flex items-center gap-2">
                     {c._prop.foto_url && (
-                      <img src={c._prop.foto_url} alt="fazenda" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                        <FotoClicavel src={c._prop.foto_url} alt={c._prop.nome} className="w-full h-full object-cover" />
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-700 truncate">{c._prop.nome}</p>
