@@ -22,15 +22,41 @@ function VisitaModal({ visita, clientes, propriedades, onClose, onSave }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const payload = { ...form, agronomo_id: user.id };
-    if (visita?.id) {
-      await supabase.from('visitas').update(payload).eq('id', visita.id);
-    } else {
-      await supabase.from('visitas').insert(payload);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Payload explícito — nunca espalhar o objeto visita inteiro
+      // (join traz clientes:{nome} e propriedades:{nome} que quebram o PostgREST)
+      const payload = {
+        data_visita:           form.data_visita || null,
+        cliente_id:            form.cliente_id  || null,
+        propriedade_id:        form.propriedade_id || null,
+        cultura:               form.cultura     || null,
+        estagio:               form.estagio     || null,
+        observacoes:           form.observacoes || null,
+        recomendacoes:         form.recomendacoes || null,
+        ph_solo:               form.ph_solo               ? Number(form.ph_solo)               : null,
+        fosforo:               form.fosforo               ? Number(form.fosforo)               : null,
+        potassio:              form.potassio              ? Number(form.potassio)              : null,
+        calcario_recomendado:  form.calcario_recomendado  ? Number(form.calcario_recomendado)  : null,
+        status:                form.status      || 'realizada',
+        agronomo_id:           user.id,
+      };
+
+      let erro;
+      if (visita?.id) {
+        ({ error: erro } = await supabase.from('visitas').update(payload).eq('id', visita.id));
+      } else {
+        ({ error: erro } = await supabase.from('visitas').insert(payload));
+      }
+
+      if (erro) throw new Error(erro.message);
+      onSave();
+    } catch (err) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSave();
   }
 
   return (
