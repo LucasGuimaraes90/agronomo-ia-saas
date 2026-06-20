@@ -176,7 +176,7 @@ function parseMarkdownTable(tableLines) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GERADOQ!#�cX
+// GERADOR DOCX
 // ─────────────────────────────────────────────────────────────
 
 function markdownTableToWordTable(tableLines) {
@@ -550,7 +550,7 @@ async function gerarXlsx(markdown) {
     { key: 'G', width: 22 },
   ];
 
-  const ULT��A_COL = 'G';
+  const ULTIMA_COL = 'G';
   const NUM_COLS = 7; // A–G
 
   // ── Linha 1: Título
@@ -589,31 +589,22 @@ async function gerarXlsx(markdown) {
     estiloHeaderSecao(secCell);
     sheet.getRow(rowNum).height = 22;
     rowNum++;
-
-    // ── Conteúdo da seção
     for (const block of blocks) {
       if (block.type === 'table') {
-        // ── Tabela markdown → células reais
         const { headers, rows: dataRows } = parseMarkdownTable(block.lines);
         if (!headers.length) continue;
-
-        const nCols = Math.min(headers.length, NUM_COLS - 1); // máx G (sem col A)
-
-        // Linha de cabeçalho da tabela (B … até nCols+1)
+        const nCols = Math.min(headers.length, NUM_COLS - 1);
         for (let c = 0; c < nCols; c++) {
-          const colLetra = String.fromCharCode(66 + c); // B=66
+          const colLetra = String.fromCharCode(66 + c);
           const cell = sheet.getCell(`${colLetra}${rowNum}`);
           cell.value = headers[c] ?? '';
           estiloHeaderTabela(cell);
         }
-        // Mescla coluna A com próximas linhas de dados (será feito ao final)
         sheet.getCell(`A${rowNum}`).value = '';
         sheet.getRow(rowNum).height = 20;
         rowNum++;
-
-        // Linhas de dados
         dataRows.forEach((row, rowIdx) => {
-          sheet.getCell(`A${rowNum}`).value = ''; // col A vazia (section já acima)
+          sheet.getCell(`A${rowNum}`).value = '';
           for (let c = 0; c < nCols; c++) {
             const colLetra = String.fromCharCode(66 + c);
             const cell = sheet.getCell(`${colLetra}${rowNum}`);
@@ -623,72 +614,50 @@ async function gerarXlsx(markdown) {
           sheet.getRow(rowNum).height = 18;
           rowNum++;
         });
-
-        // Linha em branco separadora após a tabela
         sheet.mergeCells(`A${rowNum}:${ULTIMA_COL}${rowNum}`);
         sheet.getRow(rowNum).height = 6;
         rowNum++;
-
       } else {
-        // ── Linha de texto / bullet
         const t = block.content.trim();
         if (!t) continue;
-
         const isSubtitulo = block.content.startsWith('### ') || block.content.startsWith('#### ');
         const isBullet = block.content.startsWith('- ') || block.content.startsWith('* ');
         const texto = limparTexto(block.content);
         if (!texto) continue;
-
-        // Col A vazia, B-G merged com o conteúdo
         sheet.getCell(`A${rowNum}`).value = '';
         sheet.mergeCells(`B${rowNum}:${ULTIMA_COL}${rowNum}`);
         const contentCell = sheet.getCell(`B${rowNum}`);
-
-        if (isBullet) {
-          contentCell.value = '• ' + texto;
-          contentCell.font = { size: 10, color: { argb: 'FF1F2937' } };
-        } else if (isSubtitulo) {
-          contentCell.value = texto;
-          contentCell.font = { bold: true, size: 10, color: { argb: COR_VERDE_MEDIO } };
-          contentCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COR_VERDE_CLARO } };
-        } else {
-          contentCell.value = texto;
-          contentCell.font = { size: 10, color: { argb: 'FF1F2937' } };
-        }
-
+        if (isBullet) { contentCell.value = '• ' + texto; contentCell.font = { size: 10, color: { argb: 'FF1F2937' } }; }
+        else if (isSubtitulo) { contentCell.value = texto; contentCell.font = { bold: true, size: 10, color: { argb: COR_VERDE_MEDIO } }; contentCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COR_VERDE_CLARO } }; }
+        else { contentCell.value = texto; contentCell.font = { size: 10, color: { argb: 'FF1F2937' } }; }
         contentCell.alignment = { wrapText: true, vertical: 'top' };
         sheet.getRow(rowNum).height = 18;
         rowNum++;
       }
     }
-
-    // Linha em branco entre seções
     sheet.mergeCells(`A${rowNum}:${ULTIMA_COL}${rowNum}`);
     sheet.getRow(rowNum).height = 8;
     rowNum++;
   }
-
   return workbook.xlsx.writeBuffer();
 }
-
-// ─────────────────────────────────────────────────────────────
-// HANDLER
-// ─────────────────────────────────────────────────────────────
 
 export async function POST(req) {
   try {
     const { messages, formato } = await req.json();
-
-    if (!messages || !formato) {
-      return NextResponse.json({ error: 'Parâmetros ausentes' }, { status: 400 });
-    }
-
+    if (!messages || !formato) return NextResponse.json({ error: 'Parâmetros ausentes' }, { status: 400 });
     let promptSistema;
     if (formato === 'pptx') promptSistema = PROMPT_PPTX;
     else if (formato === 'xlsx') promptSistema = PROMPT_XLSX;
     else promptSistema = PROMPT_DOCUMENTO;
-
     const markdown = await gerarConteudo(messages, promptSistema);
+    let buffer, contentType, filename;
+    const ts = Date.now();
+    if (formato === 'docx') { buffer = await gerarDocx(markdown); contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; filename = `laudo_agronomo_${ts}.docx`; }
+    else if (formato === 'pptx') { buffer = await gerarPptx(markdown); contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; filename = `apresentacao_agronomo_${ts}.pptx`; }
+    else if (formato === 'xlsx') { buffer = await gerarXlsx(markdown); contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; filename = `dados_agronomo_${ts}.xlsx`; }
+    else return NextResponse.json({ error: 'Formato inválido. Use: docx, pptx, xlsx' }, { status: 400 });
+    return new NextResponse(buffer, { status: 200, headers: { 'Content-Type': contentType, 'Content-Disposition': `attachment; filename="${filename}"`, 'Con   const markdown = await gerarConteudo(messages, promptSistema);
 
     let buffer, contentType, filename;
     const ts = Date.now();
