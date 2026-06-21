@@ -132,4 +132,105 @@ export default function Sidebar() {
               </div>
             ))}
           </div>
-    
+        )}
+      </nav>
+
+      {/* Upgrade banner — apenas básico */}
+      {plano === 'basico' && (
+        <div className="mx-3 mb-3 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 p-3.5 text-white">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Zap className="w-4 h-4 flex-shrink-0" />
+            <p className="text-sm font-bold">Upgrade para Pro</p>
+          </div>
+          <p className="text-xs text-primary-100 mb-3 leading-relaxed">
+            Acesse Clientes, Propriedades, Visitas e Agenda.
+          </p>
+          <a
+            href="https://wa.me/5534991307301?text=Quero+fazer+upgrade+para+o+plano+Pro"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-center text-xs font-semibold bg-white text-primary-700 rounded-lg py-2 hover:bg-primary-50 transition-colors"
+          >
+            Falar no WhatsApp →
+          </a>
+        </div>
+      )}
+
+      {/* Admin link */}
+      {isAdmin && (
+        <div className="px-3 pb-2">
+          <Link
+            href="/admin"
+            onClick={() => setOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              pathname.startsWith('/admin')
+                ? 'bg-yellow-50 text-yellow-700'
+                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+          >
+            <Shield className="w-4 h-4 flex-shrink-0" />
+            Admin
+          </Link>
+        </div>
+      )}
+
+      {/* Logout */}
+      <div className="p-3 border-t border-gray-100">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+        >
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          Sair
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex flex-col w-64 h-screen bg-white border-r border-gray-200 fixed top-0 left-0 z-30">
+        <NavContent />
+      </aside>
+
+      {/* Mobile topbar */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3">
+        <button
+          onClick={() => setOpen(true)}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <Menu className="w-5 h-5 text-gray-600" />
+        </button>
+        <div className="flex items-center gap-2 flex-1">
+          <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center">
+            <Leaf className="w-4 h-4 text-white" />
+          </div>
+          <span className="font-bold text-gray-900 text-sm">Agrônomo IA</span>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>
+          {badge.label}
+        </span>
+      </header>
+
+      {/* Mobile drawer */}
+      {open && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+          />
+          <aside className="relative w-72 h-full bg-white flex flex-col shadow-xl">
+            <button
+              onClick={() => setOpen(false)}
+              className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-gray-100"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+            <NavContent />
+          </aside>
+        </div>
+      )}
+    </>
+  );
+}
