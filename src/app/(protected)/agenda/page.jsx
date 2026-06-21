@@ -16,7 +16,6 @@ function AgModal({ ag, clientes, onClose, onSave }) {
   const supabase = createClient();
   const [form, setForm] = useState(ag ? {
     ...ag,
-    // Converte UTC do banco para horário local no input
     data_hora: ag.data_hora ? format(parseISO(ag.data_hora), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
   } : {
     titulo: '', descricao: '', data_hora: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
@@ -27,20 +26,28 @@ function AgModal({ ag, clientes, onClose, onSave }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const payload = {
-      ...form,
-      // Converte horário local para UTC antes de salvar
-      data_hora: new Date(form.data_hora).toISOString(),
-      agronomo_id: user.id,
-    };
-    if (ag?.id) {
-      await supabase.from('agendamentos').update(payload).eq('id', ag.id);
-    } else {
-      await supabase.from('agendamentos').insert(payload);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Remove campos de join e garante tipos corretos
+      const { clientes: _c, id: _id, agronomo_id: _a, ...campos } = form;
+      const payload = {
+        ...campos,
+        data_hora: new Date(form.data_hora).toISOString(),
+        cliente_id: form.cliente_id || null,
+        duracao_min: Number(form.duracao_min) || 60,
+        agronomo_id: user.id,
+      };
+      if (ag?.id) {
+        await supabase.from('agendamentos').update(payload).eq('id', ag.id);
+      } else {
+        await supabase.from('agendamentos').insert(payload);
+      }
+      onSave();
+    } catch (err) {
+      console.error('Erro ao salvar agendamento:', err);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSave();
   }
 
   return (
@@ -86,14 +93,14 @@ function AgModal({ ag, clientes, onClose, onSave }) {
           </div>
           <div>
             <label className="label">Cliente</label>
-            <select className="input" value={form.cliente_id} onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value }))}>
+            <select className="input" value={form.cliente_id || ''} onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value }))}>
               <option value="">Selecione (opcional)</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
           <div>
             <label className="label">Descrição</label>
-            <textarea className="input h-20 resize-none" placeholder="Detalhes do agendamento..." value={form.descricao} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} />
+            <textarea className="input h-20 resize-none" placeholder="Detalhes do agendamento..." value={form.descricao || ''} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
