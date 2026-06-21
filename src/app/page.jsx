@@ -28,6 +28,17 @@ export default function LoginPage() {
         if (error) throw error;
         router.push('/dashboard');
       } else {
+        // Verificar whitelist antes de criar conta
+        const { data: autorizado } = await supabase
+          .from('whitelist')
+          .select('email')
+          .eq('email', email.toLowerCase().trim())
+          .single();
+
+        if (!autorizado) {
+          throw new Error('E-mail não autorizado. Solicite acesso ao administrador.');
+        }
+
         const { error } = await supabase.auth.signUp({
           email,
           password: senha,
@@ -119,17 +130,3 @@ export default function LoginPage() {
           {mode === 'login' && (
             <p className="text-center text-sm text-gray-500 mt-4">
               Não tem conta?{' '}
-              <button onClick={() => setMode('signup')} className="text-primary-600 font-medium hover:underline">
-                Criar agora
-              </button>
-            </p>
-          )}
-        </div>
-
-        <p className="text-center text-xs text-gray-400 mt-6">
-          © 2024 Agrônomo IA · Guara Audiovisual
-        </p>
-      </div>
-    </div>
-  );
-}
