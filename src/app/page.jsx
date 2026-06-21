@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Leaf, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [mode, setMode] = useState('login');
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -28,17 +28,14 @@ export default function LoginPage() {
         if (error) throw error;
         router.push('/dashboard');
       } else {
-        // Verificar whitelist antes de criar conta
         const { data: autorizado } = await supabase
           .from('whitelist')
           .select('email')
           .eq('email', email.toLowerCase().trim())
           .single();
-
         if (!autorizado) {
           throw new Error('E-mail não autorizado. Solicite acesso ao administrador.');
         }
-
         const { error } = await supabase.auth.signUp({
           email,
           password: senha,
@@ -63,7 +60,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-green-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-2xl mb-4 shadow-lg">
             <Leaf className="w-8 h-8 text-white" />
@@ -72,7 +68,6 @@ export default function LoginPage() {
           <p className="text-gray-500 mt-1">Plataforma inteligente para agrônomos</p>
         </div>
 
-        {/* Card */}
         <div className="card p-8">
           <div className="flex rounded-lg bg-gray-100 p-1 mb-6">
             <button
@@ -130,3 +125,17 @@ export default function LoginPage() {
           {mode === 'login' && (
             <p className="text-center text-sm text-gray-500 mt-4">
               Não tem conta?{' '}
+              <button onClick={() => setMode('signup')} className="text-primary-600 font-medium hover:underline">
+                Criar agora
+              </button>
+            </p>
+          )}
+        </div>
+
+        <p className="text-center text-xs text-gray-400 mt-6">
+          © 2024 Agrônomo IA · Guara Audiovisual
+        </p>
+      </div>
+    </div>
+  );
+}
