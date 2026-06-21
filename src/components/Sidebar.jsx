@@ -41,7 +41,6 @@ export default function Sidebar() {
 
   const NavContent = () => (
     <>
-      {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-100">
         <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center flex-shrink-0">
           <Leaf className="w-5 h-5 text-white" />
@@ -52,7 +51,6 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {navItems.map(({ href, icon: Icon, label }) => {
           const active = pathname.startsWith(href);
@@ -74,7 +72,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Admin */}
       {isAdmin && (
         <div className="px-3 pb-1">
           <Link
@@ -92,7 +89,6 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Logout */}
       <div className="p-3 border-t border-gray-100">
         <button
           onClick={handleLogout}
@@ -107,12 +103,10 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 z-30">
         <NavContent />
       </aside>
 
-      {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 flex items-center gap-3 px-4 py-3">
         <button onClick={() => setOpen(true)} className="text-gray-600">
           <Menu className="w-5 h-5" />
@@ -125,7 +119,6 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Mobile drawer */}
       {open && (
         <div className="md:hidden fixed inset-0 z-40 flex">
           <div className="fixed inset-0 bg-black/40" onClick={() => setOpen(false)} />
