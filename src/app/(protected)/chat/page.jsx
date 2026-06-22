@@ -304,9 +304,9 @@ export default function ChatPage() {
   ];
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] gap-4">
-      {/* Sidebar de conversas */}
-      <div className="w-56 flex flex-col gap-2 flex-shrink-0">
+    <div className="flex h-[calc(100vh-3.5rem)] lg:h-[calc(100vh-6rem)] gap-4">
+      {/* Sidebar de conversas — oculta no mobile */}
+      <div className="hidden lg:flex w-56 flex-col gap-2 flex-shrink-0">
         <button onClick={novaConversa} className="btn-primary text-sm flex items-center gap-2 justify-center">
           <Plus className="w-4 h-4" /> Nova conversa
         </button>
@@ -336,32 +336,42 @@ export default function ChatPage() {
 
       {/* Chat principal */}
       <div className="flex flex-col flex-1 min-w-0">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Chat Agrônomo IA</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Assistente tecnico especializado em agronomia</p>
+        {/* Header */}
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {/* Botão Nova conversa no mobile */}
+            <button
+              onClick={novaConversa}
+              className="lg:hidden flex items-center gap-1.5 text-xs btn-primary px-3 py-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" /> Nova
+            </button>
+            <div className="hidden lg:block">
+              <h1 className="text-2xl font-bold text-gray-900">Chat Agrônomo IA</h1>
+              <p className="text-gray-500 text-sm mt-0.5">Assistente tecnico especializado em agronomia</p>
+            </div>
           </div>
 
           {hasContent && (
-            <div className="flex flex-wrap gap-1.5 justify-end">
-              <span className="text-xs text-gray-400 self-center mr-1">Exportar:</span>
+            <div className="flex flex-wrap gap-1 lg:gap-1.5 justify-end">
+              <span className="hidden lg:inline text-xs text-gray-400 self-center mr-1">Exportar:</span>
               {BOTOES_EXPORT.map(({ formato, label, icon: Icon, cor, bg }) => (
                 <button
                   key={formato}
                   onClick={() => exportar(formato)}
                   disabled={!!generating}
-                  className={`btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-60 border ${bg} ${cor}`}
+                  className={`btn-secondary text-xs flex items-center gap-1 lg:gap-1.5 disabled:opacity-60 border ${bg} ${cor} px-2 py-1`}
                   title={`Baixar como ${label}`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  {generating === formato ? 'Gerando...' : label}
+                  <span className="hidden sm:inline">{generating === formato ? 'Gerando...' : label}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="flex-1 card overflow-y-auto p-4 space-y-4 mb-4">
+        <div className="flex-1 card overflow-y-auto p-3 lg:p-4 space-y-4 mb-3">
           {messages.map((msg, i) => <Mensagem key={i} msg={msg} />)}
           {loading && (
             <div className="flex gap-3">
@@ -392,20 +402,3 @@ export default function ChatPage() {
         )}
 
         <form onSubmit={sendMessage} className="flex gap-2">
-          <input
-            ref={inputRef}
-            className="input flex-1"
-            placeholder="Digite sua dúvida agronômica..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
-            disabled={loading}
-          />
-          <button type="submit" disabled={!input.trim() || loading} className="btn-primary px-4 disabled:opacity-60">
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
