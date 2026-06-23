@@ -57,9 +57,17 @@ export default function ChatPage() {
   const [conversas, setConversas] = useState([]);
   const [conversaId, setConversaId] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const supabase = createClient();
+
+  useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth >= 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -303,10 +311,12 @@ export default function ChatPage() {
     'Como identificar deficiência de boro no café?',
   ];
 
+  const chatHeight = isDesktop ? 'calc(100vh - 6rem)' : 'calc(100vh - 3.5rem)';
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] lg:h-[calc(100vh-6rem)] gap-4">
+    <div style={{ height: chatHeight }} className="flex gap-4">
       {/* Sidebar de conversas — oculta no mobile */}
-      <div className="hidden lg:flex w-56 flex-col gap-2 flex-shrink-0">
+      {isDesktop && <div className="w-56 flex flex-col gap-2 flex-shrink-0">
         <button onClick={novaConversa} className="btn-primary text-sm flex items-center gap-2 justify-center">
           <Plus className="w-4 h-4" /> Nova conversa
         </button>
@@ -332,7 +342,7 @@ export default function ChatPage() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Chat principal */}
       <div className="flex flex-col flex-1 min-w-0">
@@ -340,16 +350,20 @@ export default function ChatPage() {
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {/* Botão Nova conversa no mobile */}
-            <button
-              onClick={novaConversa}
-              className="lg:hidden flex items-center gap-1.5 text-xs btn-primary px-3 py-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" /> Nova
-            </button>
-            <div className="hidden lg:block">
-              <h1 className="text-2xl font-bold text-gray-900">Chat Agrônomo IA</h1>
-              <p className="text-gray-500 text-sm mt-0.5">Assistente tecnico especializado em agronomia</p>
-            </div>
+            {!isDesktop && (
+              <button
+                onClick={novaConversa}
+                className="flex items-center gap-1.5 text-xs btn-primary px-3 py-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nova
+              </button>
+            )}
+            {isDesktop && (
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Chat Agrônomo IA</h1>
+                <p className="text-gray-500 text-sm mt-0.5">Assistente tecnico especializado em agronomia</p>
+              </div>
+            )}
           </div>
 
           {hasContent && (
@@ -402,3 +416,20 @@ export default function ChatPage() {
         )}
 
         <form onSubmit={sendMessage} className="flex gap-2">
+          <input
+            ref={inputRef}
+            className="input flex-1"
+            placeholder="Digite sua dúvida agronômica..."
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
+            disabled={loading}
+          />
+          <button type="submit" disabled={!input.trim() || loading} className="btn-primary px-4 disabled:opacity-60">
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
