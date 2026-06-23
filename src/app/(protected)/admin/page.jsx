@@ -186,4 +186,85 @@ export default function AdminPage() {
           {sucesso && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{sucesso}</p>}
           <button
             type="submit"
-          
+            disabled={salvando}
+            className="btn-primary px-5 py-2 disabled:opacity-60"
+          >
+            {salvando ? 'Salvando...' : 'Liberar acesso'}
+          </button>
+        </form>
+      </div>
+
+      {/* Lista */}
+      <div className="card overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-primary-600" />
+            Acessos liberados
+          </h2>
+        </div>
+        {lista.length === 0 ? (
+          <div className="px-5 py-10 text-center text-gray-400 text-sm">
+            Nenhum e-mail autorizado ainda.
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {lista.map(item => {
+              const planoInfo = PLANOS.find(p => p.value === item.plano) || PLANOS[0];
+              return (
+                <li key={item.id} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-800 truncate">{item.email}</p>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${planoInfo.cls}`}>
+                        {planoInfo.label}
+                      </span>
+                    </div>
+                    {item.nome && <p className="text-xs text-gray-400 mt-0.5">{item.nome}</p>}
+                    <p className="text-xs text-gray-300 mt-0.5">
+                      {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {/* Alterar plano inline */}
+                    <div className="relative">
+                      <select
+                        value={item.plano || 'basico'}
+                        onChange={e => alterarPlano(item.id, e.target.value)}
+                        disabled={atualizando === item.id}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 pr-6 appearance-none bg-white text-gray-600 cursor-pointer hover:border-gray-300 focus:outline-none focus:border-primary-400 disabled:opacity-50"
+                      >
+                        {PLANOS.map(p => (
+                          <option key={p.value} value={p.value}>{p.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+
+                    <button
+                      onClick={() => copiarEmail(item.email)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                      title="Copiar e-mail"
+                    >
+                      {copiado === item.email
+                        ? <Check className="w-4 h-4 text-green-500" />
+                        : <Copy className="w-4 h-4" />
+                      }
+                    </button>
+                    <button
+                      onClick={() => remover(item.id, item.email)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Remover acesso"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
