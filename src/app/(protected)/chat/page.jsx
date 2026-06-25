@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Send, Bot, User, FileText, File, Plus, MessageSquare,
-  Trash2, Download,
+  Trash2, Download, Paperclip, X,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
@@ -19,23 +19,36 @@ Voce pode enviar texto ou anexar uma foto/imagem do laudo de solo para eu analis
 
 const GREETING_MSG = { role: 'assistant', content: GREETING };
 
+function formatHtml(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^## (.*)/gm, '<h2 class="font-bold text-base mt-2 mb-1">$1</h2>')
+    .replace(/^### (.*)/gm, '<h3 class="font-semibold mt-2 mb-1">$1</h3>')
+    .replace(/^- (.*)/gm, '<span class="block pl-3">• $1</span>')
+    .replace(/\n\n/g, '<br/><br/>');
+}
+
 function Mensagem({ msg }) {
   const isBot = msg.role === 'assistant';
+  const blocks = Array.isArray(msg.content) ? msg.content : null;
+  const textContent = blocks ? (blocks.find(b => b.type === 'text')?.text || '') : msg.content;
+  const imageBlock = blocks?.find(b => b.type === 'image');
+
   return (
     <div className={`flex gap-3 ${isBot ? '' : 'flex-row-reverse'}`}>
       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isBot ? 'bg-primary-100' : 'bg-gray-200'}`}>
         {isBot ? <Bot className="w-4 h-4 text-primary-600" /> : <User className="w-4 h-4 text-gray-600" />}
       </div>
       <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isBot ? 'bg-white border border-gray-200 text-gray-800' : 'bg-primary-600 text-white'}`}>
-        <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{
-          __html: msg.content
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/^## (.*)/gm, '<h2 class="font-bold text-base mt-2 mb-1">$1</h2>')
-            .replace(/^### (.*)/gm, '<h3 class="font-semibold mt-2 mb-1">$1</h3>')
-            .replace(/^- (.*)/gm, '<span class="block pl-3">• $1</span>')
-            .replace(/\n\n/g, '<br/><br/>')
-        }} />
+        {imageBlock && (
+          <img
+            src={`data:${imageBlock.media_type};base64,${imageBlock.data}`}
+            alt="Laudo enviado"
+            className="max-w-full rounded-lg mb-2 max-h-64 object-contain"
+          />
+        )}
+        <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatHtml(textContent) }} />
       </div>
     </div>
   );
@@ -58,8 +71,10 @@ export default function ChatPage() {
   const [conversaId, setConversaId] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null); // { data, mediaType, preview }
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -177,13 +192,39 @@ export default function ChatPage() {
     }
   }
 
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result; // data:image/jpeg;base64,...
+      const [meta, data] = dataUrl.split(',');
+      const mediaType = meta.match(/:(.*?);/)[1];
+      setSelectedImage({ data, mediaType, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // reset so same file can be re-selected
+  }
+
   async function sendMessage(e) {
     e?.preventDefault();
-    if (!input.trim() || loading) return;
-    const userMsg = { role: 'user', content: input.trim() };
+    if ((!input.trim() && !selectedImage) || loading) return;
+
+    let content;
+    if (selectedImage) {
+      content = [
+        { type: 'image', media_type: selectedImage.mediaType, data: selectedImage.data },
+        { type: 'text', text: input.trim() || 'Analise este laudo de solo.' },
+      ];
+    } else {
+      content = input.trim();
+    }
+
+    const userMsg = { role: 'user', content };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
+    setSelectedImage(null);
     setLoading(true);
 
     try {
@@ -205,7 +246,12 @@ export default function ChatPage() {
       const finalMessages = [...newMessages, assistantMsg];
       setMessages(finalMessages);
 
-      const toSave = finalMessages.filter(m => m.content !== GREETING);
+      // Strip image base64 before saving to Supabase (avoid bloat)
+      const toSave = finalMessages
+        .filter(m => m.content !== GREETING)
+        .map(m => Array.isArray(m.content)
+          ? { ...m, content: m.content.find(b => b.type === 'text')?.text || '[Imagem enviada]' }
+          : m);
       await salvarConversa(toSave);
 
       // Auto-gera o arquivo se o IA incluiu o marcador
@@ -415,17 +461,52 @@ export default function ChatPage() {
           </div>
         )}
 
+        {/* Image preview strip */}
+        {selectedImage && (
+          <div className="flex items-center gap-2 mb-2 p-2 bg-primary-50 border border-primary-200 rounded-xl">
+            <img src={selectedImage.preview} alt="Pré-visualização" className="h-14 w-14 object-cover rounded-lg flex-shrink-0" />
+            <span className="text-xs text-primary-700 flex-1 truncate">Imagem pronta para enviar</span>
+            <button
+              type="button"
+              onClick={() => setSelectedImage(null)}
+              className="text-gray-400 hover:text-red-500 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageSelect}
+        />
+
         <form onSubmit={sendMessage} className="flex gap-2">
+          {/* Attach button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="btn-secondary px-3 flex-shrink-0 disabled:opacity-60"
+            title="Anexar foto do laudo"
+          >
+            <Paperclip className="w-4 h-4 text-gray-500" />
+          </button>
+
           <input
             ref={inputRef}
             className="input flex-1"
-            placeholder="Digite sua dúvida agronômica..."
+            placeholder={selectedImage ? 'Adicione um texto (opcional)...' : 'Digite sua dúvida agronômica...'}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(e)}
             disabled={loading}
           />
-          <button type="submit" disabled={!input.trim() || loading} className="btn-primary px-4 disabled:opacity-60">
+          <button type="submit" disabled={(!input.trim() && !selectedImage) || loading} className="btn-primary px-4 disabled:opacity-60">
             <Send className="w-4 h-4" />
           </button>
         </form>
