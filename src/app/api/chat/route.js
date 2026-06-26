@@ -11,7 +11,7 @@ Voce tem expertise em:
 - Legislacao agricola brasileira (receituario agronomico, ART)
 - Embrapa, IAC, IAPAR - bases tecnicas brasileiras
 
-Quando receber uma imagem de laudo de solo, leia e interprete todos os valores visiveis.
+Quando receber uma imagem ou PDF de laudo de solo, leia e interprete todos os valores visiveis.
 
 CAPACIDADE DE GERAR ARQUIVOS:
 Voce pode gerar arquivos reais para download. Quando o usuario pedir:
@@ -53,6 +53,16 @@ export async function POST(req) {
                 source: {
                   type: 'base64',
                   media_type: block.media_type || 'image/jpeg',
+                  data: block.data,
+                },
+              };
+            }
+            if (block.type === 'document') {
+              return {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
                   data: block.data,
                 },
               };
