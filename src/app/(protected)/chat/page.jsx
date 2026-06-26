@@ -15,7 +15,7 @@ Posso ajudar com:
 - Diagnostico de pragas e doencas
 - Geracao de laudos tecnicos
 
-Voce pode enviar texto ou anexar uma foto/imagem do laudo de solo para eu analisar!`;
+Voce pode enviar texto ou anexar uma foto ou PDF do laudo de solo para eu analisar!`;
 
 const GREETING_MSG = { role: 'assistant', content: GREETING };
 
@@ -34,6 +34,7 @@ function Mensagem({ msg }) {
   const blocks = Array.isArray(msg.content) ? msg.content : null;
   const textContent = blocks ? (blocks.find(b => b.type === 'text')?.text || '') : msg.content;
   const imageBlock = blocks?.find(b => b.type === 'image');
+  const documentBlock = blocks?.find(b => b.type === 'document');
 
   return (
     <div className={`flex gap-3 ${isBot ? '' : 'flex-row-reverse'}`}>
@@ -47,6 +48,12 @@ function Mensagem({ msg }) {
             alt="Laudo enviado"
             className="max-w-full rounded-lg mb-2 max-h-64 object-contain"
           />
+        )}
+        {documentBlock && (
+          <div className="flex items-center gap-2 mb-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+            <FileText className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <span className="text-xs text-red-700 font-medium">PDF enviado para análise</span>
+          </div>
         )}
         <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatHtml(textContent) }} />
       </div>
@@ -195,15 +202,16 @@ export default function ChatPage() {
   function handleImageSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const isPdf = file.type === 'application/pdf';
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const dataUrl = ev.target.result; // data:image/jpeg;base64,...
+      const dataUrl = ev.target.result;
       const [meta, data] = dataUrl.split(',');
       const mediaType = meta.match(/:(.*?);/)[1];
-      setSelectedImage({ data, mediaType, preview: dataUrl });
+      setSelectedImage({ data, mediaType, preview: dataUrl, isPdf, fileName: file.name });
     };
     reader.readAsDataURL(file);
-    e.target.value = ''; // reset so same file can be re-selected
+    e.target.value = '';
   }
 
   async function sendMessage(e) {
@@ -212,10 +220,17 @@ export default function ChatPage() {
 
     let content;
     if (selectedImage) {
-      content = [
-        { type: 'image', media_type: selectedImage.mediaType, data: selectedImage.data },
-        { type: 'text', text: input.trim() || 'Analise este laudo de solo.' },
-      ];
+      if (selectedImage.isPdf) {
+        content = [
+          { type: 'document', media_type: 'application/pdf', data: selectedImage.data },
+          { type: 'text', text: input.trim() || 'Analise este laudo de solo.' },
+        ];
+      } else {
+        content = [
+          { type: 'image', media_type: selectedImage.mediaType, data: selectedImage.data },
+          { type: 'text', text: input.trim() || 'Analise este laudo de solo.' },
+        ];
+      }
     } else {
       content = input.trim();
     }
@@ -246,11 +261,11 @@ export default function ChatPage() {
       const finalMessages = [...newMessages, assistantMsg];
       setMessages(finalMessages);
 
-      // Strip image base64 before saving to Supabase (avoid bloat)
+      // Strip image/document base64 before saving to Supabase (avoid bloat)
       const toSave = finalMessages
         .filter(m => m.content !== GREETING)
         .map(m => Array.isArray(m.content)
-          ? { ...m, content: m.content.find(b => b.type === 'text')?.text || '[Imagem enviada]' }
+          ? { ...m, content: m.content.find(b => b.type === 'text')?.text || '[Arquivo enviado]' }
           : m);
       await salvarConversa(toSave);
 
@@ -461,11 +476,19 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Image preview strip */}
+        {/* File preview strip */}
         {selectedImage && (
           <div className="flex items-center gap-2 mb-2 p-2 bg-primary-50 border border-primary-200 rounded-xl">
-            <img src={selectedImage.preview} alt="Pré-visualização" className="h-14 w-14 object-cover rounded-lg flex-shrink-0" />
-            <span className="text-xs text-primary-700 flex-1 truncate">Imagem pronta para enviar</span>
+            {selectedImage.isPdf ? (
+              <div className="h-14 w-14 rounded-lg flex-shrink-0 bg-red-100 flex items-center justify-center">
+                <FileText className="w-6 h-6 text-red-600" />
+              </div>
+            ) : (
+              <img src={selectedImage.preview} alt="Pré-visualização" className="h-14 w-14 object-cover rounded-lg flex-shrink-0" />
+            )}
+            <span className="text-xs text-primary-700 flex-1 truncate">
+              {selectedImage.isPdf ? selectedImage.fileName : 'Imagem pronta para enviar'}
+            </span>
             <button
               type="button"
               onClick={() => setSelectedImage(null)}
@@ -480,7 +503,7 @@ export default function ChatPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           className="hidden"
           onChange={handleImageSelect}
         />
